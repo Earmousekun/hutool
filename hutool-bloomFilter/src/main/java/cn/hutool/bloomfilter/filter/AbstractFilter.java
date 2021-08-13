@@ -46,14 +46,14 @@ public abstract class AbstractFilter implements BloomFilter {
 	public void init(long maxValue, int machineNum) {
 		this.size = maxValue;
 		switch (machineNum) {
-		case BitMap.MACHINE32:
-			bm = new IntMap((int) (size / machineNum));
-			break;
-		case BitMap.MACHINE64:
-			bm = new LongMap((int) (size / machineNum));
-			break;
-		default:
-			throw new RuntimeException("Error Machine number!");
+			case BitMap.MACHINE32:
+				bm = new IntMap((int) (size / machineNum));
+				break;
+			case BitMap.MACHINE64:
+				bm = new LongMap((int) (size / machineNum));
+				break;
+			default:
+				throw new RuntimeException("Error Machine number!");
 		}
 	}
 
