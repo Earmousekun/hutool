@@ -3,6 +3,7 @@ package cn.hutool.core.lang;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.ArrayUtil;
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 
 import java.util.Map;
@@ -15,6 +16,9 @@ import java.util.function.Supplier;
  * @author Looly
  */
 public class Assert {
+
+	private static final String TEMPLATE_VALUE_MUST_BE_BETWEEN_AND = "The value must be between {} and {}.";
+
 
 	/**
 	 * 断言是否为真，如果为 {@code false} 抛出给定的异常<br>
@@ -54,7 +58,7 @@ public class Assert {
 	 * 断言是否为真，如果为 {@code false} 抛出 {@code IllegalArgumentException} 异常<br>
 	 *
 	 * <pre class="code">
-	 * Assert.isTrue(i &gt; 0, "The value must be greater than zero");
+	 * Assert.isTrue(i &gt; 0);
 	 * </pre>
 	 *
 	 * @param expression 布尔值
@@ -90,7 +94,7 @@ public class Assert {
 	 * 断言是否为假，如果为 {@code true} 抛出 {@code IllegalArgumentException} 异常<br>
 	 *
 	 * <pre class="code">
-	 * Assert.isFalse(i &lt; 0, "The value must be greater than zero");
+	 * Assert.isFalse(i &lt; 0, "The value must not be negative");
 	 * </pre>
 	 *
 	 * @param expression       布尔值
@@ -340,7 +344,7 @@ public class Assert {
 	 * 检查给定字符串是否为空白（null、空串或只包含空白符），为空抛出 {@link IllegalArgumentException}
 	 *
 	 * <pre class="code">
-	 * Assert.notBlank(name, "Name must not be blank");
+	 * Assert.notBlank(name);
 	 * </pre>
 	 *
 	 * @param <T>  字符串类型
@@ -402,7 +406,7 @@ public class Assert {
 	 * 断言给定字符串是否不被另一个字符串包含（即是否为子串）
 	 *
 	 * <pre class="code">
-	 * Assert.notContain(name, "rod", "Name must not contain 'rod'");
+	 * Assert.notContain(name, "rod");
 	 * </pre>
 	 *
 	 * @param textToSearch 被搜索的字符串
@@ -505,7 +509,7 @@ public class Assert {
 	 * 断言给定数组是否不包含{@code null}元素，如果数组为空或 {@code null}将被认为不包含
 	 *
 	 * <pre class="code">
-	 * Assert.noNullElements(array, "The array must have non-null elements");
+	 * Assert.noNullElements(array, "The array must not have null elements");
 	 * </pre>
 	 *
 	 * @param <T>              数组元素类型
@@ -686,7 +690,7 @@ public class Assert {
 	 * 断言给定对象是否是给定类的实例
 	 *
 	 * <pre class="code">
-	 * Assert.instanceOf(Foo.class, foo);
+	 * Assert.instanceOf(Foo.class, foo, "foo must be an instance of class Foo");
 	 * </pre>
 	 *
 	 * @param <T>              被检查对象泛型类型
@@ -725,7 +729,7 @@ public class Assert {
 	 * 断言 {@code superType.isAssignableFrom(subType)} 是否为 {@code true}.
 	 *
 	 * <pre class="code">
-	 * Assert.isAssignable(Number.class, myClass);
+	 * Assert.isAssignable(Number.class, myClass, "myClass must can be assignable to class Number");
 	 * </pre>
 	 *
 	 * @param superType        需要检查的父类或接口
@@ -837,6 +841,41 @@ public class Assert {
 	/**
 	 * 检查值是否在指定范围内
 	 *
+	 * @param <X>           异常类型
+	 * @param value         值
+	 * @param min           最小值（包含）
+	 * @param max           最大值（包含）
+	 * @param errorSupplier 错误抛出异常附带的消息生产接口
+	 * @return 经过检查后的值
+	 * @throws X if value is out of bound
+	 * @since 5.7.15
+	 */
+	public static <X extends Throwable> int checkBetween(int value, int min, int max, Supplier<? extends X> errorSupplier) throws X {
+		if (value < min || value > max) {
+			throw errorSupplier.get();
+		}
+
+		return value;
+	}
+
+	/**
+	 * 检查值是否在指定范围内
+	 *
+	 * @param value            值
+	 * @param min              最小值（包含）
+	 * @param max              最大值（包含）
+	 * @param errorMsgTemplate 异常信息模板，类似于"aa{}bb{}cc"
+	 * @param params           异常信息参数，用于替换"{}"占位符
+	 * @return 经过检查后的值
+	 * @since 5.7.15
+	 */
+	public static int checkBetween(int value, int min, int max, String errorMsgTemplate, Object... params) {
+		return checkBetween(value, min, max, () -> new IllegalArgumentException(StrUtil.format(errorMsgTemplate, params)));
+	}
+
+	/**
+	 * 检查值是否在指定范围内
+	 *
 	 * @param value 值
 	 * @param min   最小值（包含）
 	 * @param max   最大值（包含）
@@ -844,10 +883,42 @@ public class Assert {
 	 * @since 4.1.10
 	 */
 	public static int checkBetween(int value, int min, int max) {
+		return checkBetween(value, min, max, TEMPLATE_VALUE_MUST_BE_BETWEEN_AND, min, max);
+	}
+
+	/**
+	 * 检查值是否在指定范围内
+	 *
+	 * @param <X>           异常类型
+	 * @param value         值
+	 * @param min           最小值（包含）
+	 * @param max           最大值（包含）
+	 * @param errorSupplier 错误抛出异常附带的消息生产接口
+	 * @return 经过检查后的值
+	 * @throws X if value is out of bound
+	 * @since 5.7.15
+	 */
+	public static <X extends Throwable> long checkBetween(long value, long min, long max, Supplier<? extends X> errorSupplier) throws X {
 		if (value < min || value > max) {
-			throw new IllegalArgumentException(StrUtil.format("Length must be between {} and {}.", min, max));
+			throw errorSupplier.get();
 		}
+
 		return value;
+	}
+
+	/**
+	 * 检查值是否在指定范围内
+	 *
+	 * @param value            值
+	 * @param min              最小值（包含）
+	 * @param max              最大值（包含）
+	 * @param errorMsgTemplate 异常信息模板，类似于"aa{}bb{}cc"
+	 * @param params           异常信息参数，用于替换"{}"占位符
+	 * @return 经过检查后的值
+	 * @since 5.7.15
+	 */
+	public static long checkBetween(long value, long min, long max, String errorMsgTemplate, Object... params) {
+		return checkBetween(value, min, max, () -> new IllegalArgumentException(StrUtil.format(errorMsgTemplate, params)));
 	}
 
 	/**
@@ -860,10 +931,42 @@ public class Assert {
 	 * @since 4.1.10
 	 */
 	public static long checkBetween(long value, long min, long max) {
+		return checkBetween(value, min, max, TEMPLATE_VALUE_MUST_BE_BETWEEN_AND, min, max);
+	}
+
+	/**
+	 * 检查值是否在指定范围内
+	 *
+	 * @param <X>           异常类型
+	 * @param value         值
+	 * @param min           最小值（包含）
+	 * @param max           最大值（包含）
+	 * @param errorSupplier 错误抛出异常附带的消息生产接口
+	 * @return 经过检查后的值
+	 * @throws X if value is out of bound
+	 * @since 5.7.15
+	 */
+	public static <X extends Throwable> double checkBetween(double value, double min, double max, Supplier<? extends X> errorSupplier) throws X {
 		if (value < min || value > max) {
-			throw new IllegalArgumentException(StrUtil.format("Length must be between {} and {}.", min, max));
+			throw errorSupplier.get();
 		}
+
 		return value;
+	}
+
+	/**
+	 * 检查值是否在指定范围内
+	 *
+	 * @param value            值
+	 * @param min              最小值（包含）
+	 * @param max              最大值（包含）
+	 * @param errorMsgTemplate 异常信息模板，类似于"aa{}bb{}cc"
+	 * @param params           异常信息参数，用于替换"{}"占位符
+	 * @return 经过检查后的值
+	 * @since 5.7.15
+	 */
+	public static double checkBetween(double value, double min, double max, String errorMsgTemplate, Object... params) {
+		return checkBetween(value, min, max, () -> new IllegalArgumentException(StrUtil.format(errorMsgTemplate, params)));
 	}
 
 	/**
@@ -876,10 +979,7 @@ public class Assert {
 	 * @since 4.1.10
 	 */
 	public static double checkBetween(double value, double min, double max) {
-		if (value < min || value > max) {
-			throw new IllegalArgumentException(StrUtil.format("Length must be between {} and {}.", min, max));
-		}
-		return value;
+		return checkBetween(value, min, max, TEMPLATE_VALUE_MUST_BE_BETWEEN_AND, min, max);
 	}
 
 	/**
@@ -899,10 +999,103 @@ public class Assert {
 		double minDouble = min.doubleValue();
 		double maxDouble = max.doubleValue();
 		if (valueDouble < minDouble || valueDouble > maxDouble) {
-			throw new IllegalArgumentException(StrUtil.format("Length must be between {} and {}.", min, max));
+			throw new IllegalArgumentException(StrUtil.format(TEMPLATE_VALUE_MUST_BE_BETWEEN_AND, min, max));
 		}
 		return value;
 	}
+
+	/**
+	 * 断言两个对象是否不相等,如果两个对象相等 抛出IllegalArgumentException 异常
+	 * <pre class="code">
+	 *   Assert.notEquals(obj1,obj2);
+	 * </pre>
+	 *
+	 * @param obj1 对象1
+	 * @param obj2 对象2
+	 * @throws IllegalArgumentException obj1 must be not equals obj2
+	 */
+	public static void notEquals(Object obj1, Object obj2) {
+		notEquals(obj1, obj2, "({}) must be not equals ({})", obj1, obj2);
+	}
+
+	/**
+	 * 断言两个对象是否不相等,如果两个对象相等 抛出IllegalArgumentException 异常
+	 * <pre class="code">
+	 *   Assert.notEquals(obj1,obj2,"obj1 must be not equals obj2");
+	 * </pre>
+	 *
+	 * @param obj1             对象1
+	 * @param obj2             对象2
+	 * @param errorMsgTemplate 异常信息模板，类似于"aa{}bb{}cc"
+	 * @param params           异常信息参数，用于替换"{}"占位符
+	 * @throws IllegalArgumentException obj1 must be not equals obj2
+	 */
+	public static void notEquals(Object obj1, Object obj2, String errorMsgTemplate, Object... params) throws IllegalArgumentException {
+		notEquals(obj1, obj2, () -> new IllegalArgumentException(StrUtil.format(errorMsgTemplate, params)));
+	}
+
+	/**
+	 * 断言两个对象是否不相等,如果两个对象相等,抛出指定类型异常,并使用指定的函数获取错误信息返回
+	 *
+	 * @param obj1          对象1
+	 * @param obj2          对象2
+	 * @param errorSupplier 错误抛出异常附带的消息生产接口
+	 * @param <X>           异常类型
+	 * @throws X obj1 must be not equals obj2
+	 */
+	public static <X extends Throwable> void notEquals(Object obj1, Object obj2, Supplier<X> errorSupplier) throws X {
+		if (ObjectUtil.equals(obj1, obj2)) {
+			throw errorSupplier.get();
+		}
+	}
+	// ----------------------------------------------------------------------------------------------------------- Check not equals
+
+	/**
+	 * 断言两个对象是否相等,如果两个对象不相等 抛出IllegalArgumentException 异常
+	 * <pre class="code">
+	 *   Assert.isEquals(obj1,obj2);
+	 * </pre>
+	 *
+	 * @param obj1 对象1
+	 * @param obj2 对象2
+	 * @throws IllegalArgumentException obj1 must be equals obj2
+	 */
+	public static void equals(Object obj1, Object obj2) {
+		equals(obj1, obj2, "({}) must be equals ({})", obj1, obj2);
+	}
+
+	/**
+	 * 断言两个对象是否相等,如果两个对象不相等 抛出IllegalArgumentException 异常
+	 * <pre class="code">
+	 *   Assert.isEquals(obj1,obj2,"obj1 must be equals obj2");
+	 * </pre>
+	 *
+	 * @param obj1             对象1
+	 * @param obj2             对象2
+	 * @param errorMsgTemplate 异常信息模板，类似于"aa{}bb{}cc"
+	 * @param params           异常信息参数，用于替换"{}"占位符
+	 * @throws IllegalArgumentException obj1 must be equals obj2
+	 */
+	public static void equals(Object obj1, Object obj2, String errorMsgTemplate, Object... params) throws IllegalArgumentException {
+		equals(obj1, obj2, () -> new IllegalArgumentException(StrUtil.format(errorMsgTemplate, params)));
+	}
+
+	/**
+	 * 断言两个对象是否相等,如果两个对象不相等,抛出指定类型异常,并使用指定的函数获取错误信息返回
+	 *
+	 * @param obj1          对象1
+	 * @param obj2          对象2
+	 * @param errorSupplier 错误抛出异常附带的消息生产接口
+	 * @param <X>           异常类型
+	 * @throws X obj1 must be equals obj2
+	 */
+	public static <X extends Throwable> void equals(Object obj1, Object obj2, Supplier<X> errorSupplier) throws X {
+		if (ObjectUtil.notEqual(obj1, obj2)) {
+			throw errorSupplier.get();
+		}
+	}
+
+	// ----------------------------------------------------------------------------------------------------------- Check is equals
 
 	// -------------------------------------------------------------------------------------------------------------------------------------------- Private method start
 

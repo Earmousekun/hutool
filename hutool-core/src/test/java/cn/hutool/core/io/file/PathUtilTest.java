@@ -1,5 +1,6 @@
 package cn.hutool.core.io.file;
 
+import cn.hutool.core.io.FileUtil;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -46,11 +47,35 @@ public class PathUtilTest {
 
 	@Test
 	@Ignore
+	public void moveDirTest(){
+		PathUtil.move(Paths.get("c:\\aaa"), Paths.get("d:/test/looly"), false);
+	}
+
+	@Test
+	@Ignore
+	public void delDirTest(){
+		PathUtil.del(Paths.get("d:/test/looly"));
+	}
+
+	@Test
+	@Ignore
 	public void getMimeTypeTest(){
 		String mimeType = PathUtil.getMimeType(Paths.get("d:/test/test.jpg"));
 		Assert.assertEquals("image/jpeg", mimeType);
 
 		mimeType = PathUtil.getMimeType(Paths.get("d:/test/test.mov"));
 		Assert.assertEquals("video/quicktime", mimeType);
+	}
+
+	@Test
+	public void getMimeOfRarTest(){
+		String contentType = FileUtil.getMimeType("a001.rar");
+		Assert.assertEquals("application/x-rar-compressed", contentType);
+	}
+
+	@Test
+	public void getMimeOf7zTest(){
+		String contentType = FileUtil.getMimeType("a001.7z");
+		Assert.assertEquals("application/x-7z-compressed", contentType);
 	}
 }

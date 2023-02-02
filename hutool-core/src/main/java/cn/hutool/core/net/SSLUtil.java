@@ -15,6 +15,18 @@ import javax.net.ssl.TrustManager;
 public class SSLUtil {
 
 	/**
+	 * 创建{@link SSLContext}，默认新人全部
+	 *
+	 * @param protocol     SSL协议，例如TLS等
+	 * @return {@link SSLContext}
+	 * @throws IORuntimeException 包装 GeneralSecurityException异常
+	 * @since 5.7.8
+	 */
+	public static SSLContext createSSLContext(String protocol) throws IORuntimeException{
+		return SSLContextBuilder.create().setProtocol(protocol).build();
+	}
+
+	/**
 	 * 创建{@link SSLContext}
 	 *
 	 * @param protocol     SSL协议，例如TLS等
@@ -43,7 +55,6 @@ public class SSLUtil {
 		return SSLContextBuilder.create()
 				.setProtocol(protocol)
 				.setKeyManagers(keyManagers)
-				.setTrustManagers(trustManagers).buildQuietly();
+				.setTrustManagers(trustManagers).build();
 	}
-
 }

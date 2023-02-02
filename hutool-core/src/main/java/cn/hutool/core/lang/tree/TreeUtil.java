@@ -20,7 +20,7 @@ public class TreeUtil {
 	 * 构建单root节点树
 	 *
 	 * @param list 源数据集合
-	 * @return List
+	 * @return {@link Tree}
 	 * @since 5.7.2
 	 */
 	public static Tree<Integer> buildSingle(List<TreeNode<Integer>> list) {
@@ -38,12 +38,13 @@ public class TreeUtil {
 	}
 
 	/**
-	 * 构建单root节点树
+	 * 构建单root节点树<br>
+	 * 它会生成一个以指定ID为ID的空的节点，然后逐级增加子节点。
 	 *
 	 * @param <E>      ID类型
 	 * @param list     源数据集合
 	 * @param parentId 最顶层父id值 一般为 0 之类
-	 * @return List
+	 * @return {@link Tree}
 	 * @since 5.7.2
 	 */
 	public static <E> Tree<E> buildSingle(List<TreeNode<E>> list, E parentId) {
@@ -63,14 +64,15 @@ public class TreeUtil {
 	}
 
 	/**
-	 * 构建单root节点树
+	 * 构建单root节点树<br>
+	 * 它会生成一个以指定ID为ID的空的节点，然后逐级增加子节点。
 	 *
 	 * @param <T>        转换的实体 为数据源里的对象类型
 	 * @param <E>        ID类型
 	 * @param list       源数据集合
 	 * @param parentId   最顶层父id值 一般为 0 之类
 	 * @param nodeParser 转换器
-	 * @return List
+	 * @return {@link Tree}
 	 * @since 5.7.2
 	 */
 	public static <T, E> Tree<E> buildSingle(List<T> list, E parentId, NodeParser<T, E> nodeParser) {
@@ -107,7 +109,8 @@ public class TreeUtil {
 	}
 
 	/**
-	 * 构建单root节点树
+	 * 构建单root节点树<br>
+	 * 它会生成一个以指定ID为ID的空的节点，然后逐级增加子节点。
 	 *
 	 * @param <T>            转换的实体 为数据源里的对象类型
 	 * @param <E>            ID类型
@@ -115,12 +118,12 @@ public class TreeUtil {
 	 * @param rootId         最顶层父id值 一般为 0 之类
 	 * @param treeNodeConfig 配置
 	 * @param nodeParser     转换器
-	 * @return List
+	 * @return {@link Tree}
 	 * @since 5.7.2
 	 */
 	public static <T, E> Tree<E> buildSingle(List<T> list, E rootId, TreeNodeConfig treeNodeConfig, NodeParser<T, E> nodeParser) {
 		return TreeBuilder.of(rootId, treeNodeConfig)
-				.append(list, nodeParser).build();
+				.append(list, rootId, nodeParser).build();
 	}
 
 	/**
@@ -137,7 +140,8 @@ public class TreeUtil {
 	}
 
 	/**
-	 * 单点树构建，按照权重排序
+	 * 单点树构建，按照权重排序<br>
+	 * 它会生成一个以指定ID为ID的空的节点，然后逐级增加子节点。
 	 *
 	 * @param <E>    ID类型
 	 * @param map    源数据Map

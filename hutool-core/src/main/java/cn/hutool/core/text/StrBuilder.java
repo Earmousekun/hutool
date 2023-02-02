@@ -8,7 +8,8 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * 可复用的字符串生成器，非线程安全
+ * 可复用的字符串生成器，非线程安全<br>
+ *  TODO 6.x移除此类，java8的StringBuilder非常完善了，无需重写。
  *
  * @author Looly
  * @since 4.0.0
@@ -174,6 +175,13 @@ public class StrBuilder implements CharSequence, Appendable, Serializable {
 	 * @return this
 	 */
 	public StrBuilder insert(int index, char c) {
+		if(index < 0){
+			index = this.position + index;
+		}
+		if ((index < 0)) {
+			throw new StringIndexOutOfBoundsException(index);
+		}
+
 		moveDataAfterIndex(index, 1);
 		value[index] = c;
 		this.position = Math.max(this.position, index) + 1;
@@ -211,9 +219,13 @@ public class StrBuilder implements CharSequence, Appendable, Serializable {
 		if (ArrayUtil.isEmpty(src) || srcPos > src.length || length <= 0) {
 			return this;
 		}
-		if (index < 0) {
-			index = 0;
+		if(index < 0){
+			index = this.position + index;
 		}
+		if ((index < 0)) {
+			throw new StringIndexOutOfBoundsException(index);
+		}
+
 		if (srcPos < 0) {
 			srcPos = 0;
 		} else if (srcPos + length > src.length) {
@@ -238,6 +250,13 @@ public class StrBuilder implements CharSequence, Appendable, Serializable {
 	 * @return this
 	 */
 	public StrBuilder insert(int index, CharSequence csq) {
+		if(index < 0){
+			index = this.position + index;
+		}
+		if ((index < 0)) {
+			throw new StringIndexOutOfBoundsException(index);
+		}
+
 		if (null == csq) {
 			csq = StrUtil.EMPTY;
 		}
@@ -288,8 +307,11 @@ public class StrBuilder implements CharSequence, Appendable, Serializable {
 		if (start >= end) {
 			return this;
 		}
-		if (index < 0) {
-			index = 0;
+		if(index < 0){
+			index = this.position + index;
+		}
+		if ((index < 0)) {
+			throw new StringIndexOutOfBoundsException(index);
 		}
 
 		final int length = end - start;
@@ -449,7 +471,6 @@ public class StrBuilder implements CharSequence, Appendable, Serializable {
 	/**
 	 * 生成字符串
 	 */
-	@SuppressWarnings("NullableProblems")
 	@Override
 	public String toString() {
 		return toString(false);
@@ -558,7 +579,7 @@ public class StrBuilder implements CharSequence, Appendable, Serializable {
 	private static int totalLength(CharSequence... strs) {
 		int totalLength = 0;
 		for (CharSequence str : strs) {
-			totalLength += (null == str ? 4 : str.length());
+			totalLength += (null == str ? 0 : str.length());
 		}
 		return totalLength;
 	}

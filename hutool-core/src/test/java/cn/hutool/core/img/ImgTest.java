@@ -1,12 +1,16 @@
 package cn.hutool.core.img;
 
+import cn.hutool.core.io.FileTypeUtil;
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.URLUtil;
 import org.junit.Ignore;
 import org.junit.Test;
 
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.Image;
 import java.awt.Rectangle;
+import java.io.File;
 
 public class ImgTest {
 
@@ -20,6 +24,15 @@ public class ImgTest {
 	@Ignore
 	public void compressTest() {
 		Img.from(FileUtil.file("f:/test/4347273249269e3fb272341acc42d4e.jpg")).setQuality(0.8).write(FileUtil.file("f:/test/test_dest.jpg"));
+	}
+
+	@Test
+	@Ignore
+	public void compressWithBackgroundColorTest() {
+		Img.from(FileUtil.file("D:/test/before_compress.png"))
+				.setBackgroundColor(Color.WHITE)
+				.setQuality(0.8)
+				.write(FileUtil.file("D:/test/after_compress.jpg"));
 	}
 
 	@Test
@@ -48,9 +61,24 @@ public class ImgTest {
 				.write(FileUtil.file("d:/test/test2_result.png"));
 	}
 
+
 	@Test
 	@Ignore
-	public void pressImgTest(){
+	public void pressTextFullScreenTest() {
+		Img.from(FileUtil.file("d:/test/1435859438434136064.jpg"))
+				.setTargetImageType(ImgUtil.IMAGE_TYPE_PNG)
+				.pressTextFull("版权所有     ", Color.LIGHT_GRAY,
+						new Font("黑体", Font.PLAIN, 30),
+						4,
+						30,
+						0.8f)
+				.write(FileUtil.file("d:/test/2_result.png"));
+
+	}
+
+	@Test
+	@Ignore
+	public void pressImgTest() {
 		Img.from(FileUtil.file("d:/test/图片1.JPG"))
 				.pressImage(ImgUtil.read("d:/test/617180969474805871.jpg"), new Rectangle(0, 0, 800, 800), 1f)
 				.write(FileUtil.file("d:/test/pressImg_result.jpg"));
@@ -58,9 +86,23 @@ public class ImgTest {
 
 	@Test
 	@Ignore
-	public void strokeTest(){
+	public void strokeTest() {
 		Img.from(FileUtil.file("d:/test/公章3.png"))
 				.stroke(null, 2f)
 				.write(FileUtil.file("d:/test/stroke_result.png"));
+	}
+
+	/**
+	 * issue#I49FIU
+	 */
+	@Test
+	@Ignore
+	public void scaleTest() {
+		final String downloadFile = "d:/test/1435859438434136064.JPG";
+		final File file = FileUtil.file(downloadFile);
+		final File fileScale = FileUtil.file(downloadFile + ".scale." + FileTypeUtil.getType(file));
+
+		final Image img = ImgUtil.getImage(URLUtil.getURL(file));
+		ImgUtil.scale(img, fileScale, 0.8f);
 	}
 }

@@ -50,7 +50,7 @@ public class JWT implements RegisteredPayload<JWT> {
 	/**
 	 * 创建空的JWT对象
 	 *
-	 * @return {@link JWT}
+	 * @return JWT
 	 */
 	public static JWT create() {
 		return new JWT();
@@ -60,7 +60,7 @@ public class JWT implements RegisteredPayload<JWT> {
 	 * 创建并解析JWT对象
 	 *
 	 * @param token JWT Token字符串，格式为xxxx.yyyy.zzzz
-	 * @return {@link JWT}
+	 * @return JWT
 	 */
 	public static JWT of(String token) {
 		return new JWT(token);
@@ -92,6 +92,7 @@ public class JWT implements RegisteredPayload<JWT> {
 	 * @return this
 	 */
 	public JWT parse(String token) {
+		Assert.notBlank(token, "Token String must be not blank!");
 		final List<String> tokens = splitToken(token);
 		this.tokens = tokens;
 		this.header.parse(tokens.get(0), this.charset);
@@ -111,12 +112,17 @@ public class JWT implements RegisteredPayload<JWT> {
 	}
 
 	/**
-	 * 设置密钥，默认算法是：HS256(HmacSHA256)
+	 * 设置密钥，如果头部指定了算法，直接使用，否则默认算法是：HS256(HmacSHA256)
 	 *
 	 * @param key 密钥
 	 * @return this
 	 */
 	public JWT setKey(byte[] key) {
+		// 检查头信息中是否有算法信息
+		final String claim = (String) this.header.getClaim(JWTHeader.ALGORITHM);
+		if (StrUtil.isNotBlank(claim)) {
+			return setSigner(JWTSignerUtil.createSigner(claim, key));
+		}
 		return setSigner(JWTSignerUtil.hs256(key));
 	}
 
@@ -308,9 +314,15 @@ public class JWT implements RegisteredPayload<JWT> {
 	public String sign(JWTSigner signer) {
 		Assert.notNull(signer, () -> new JWTException("No Signer provided!"));
 
+		// 检查tye信息
+		final String type = (String) this.header.getClaim(JWTHeader.TYPE);
+		if (StrUtil.isBlank(type)) {
+			this.header.setClaim(JWTHeader.TYPE, "JWT");
+		}
+
 		// 检查头信息中是否有算法信息
-		final String claim = (String) this.header.getClaim(JWTHeader.ALGORITHM);
-		if (StrUtil.isBlank(claim)) {
+		final String algorithm = (String) this.header.getClaim(JWTHeader.ALGORITHM);
+		if (StrUtil.isBlank(algorithm)) {
 			this.header.setClaim(JWTHeader.ALGORITHM,
 					AlgorithmUtil.getId(signer.getAlgorithm()));
 		}
@@ -341,6 +353,7 @@ public class JWT implements RegisteredPayload<JWT> {
 	 *     <li>{@link JWTPayload#ISSUED_AT}： 签发时间不能晚于当前时间</li>
 	 * </ul>
 	 *
+	 * @param leeway 容忍空间，单位：秒。当不能晚于当前时间时，向后容忍；不能早于向前容忍。
 	 * @return 是否有效
 	 * @see JWTValidator
 	 * @since 5.7.4
@@ -352,7 +365,7 @@ public class JWT implements RegisteredPayload<JWT> {
 
 		// 校验时间字段
 		try {
-			JWTValidator.of(tokens.get(2)).validateDate(DateUtil.date(), leeway);
+			JWTValidator.of(this).validateDate(DateUtil.date(), leeway);
 		} catch (ValidateException e) {
 			return false;
 		}

@@ -4,6 +4,7 @@ import cn.hutool.core.util.XmlUtil;
 
 /**
  * 常用字符串常量定义
+ * @see CharPool
  *
  * @author looly
  * @since 5.6.3
@@ -175,7 +176,7 @@ public interface StrPool {
 
 
 	/**
-	 * 字符串常量：HTML 空格转义 {@code "&nbsp;" -> " "}
+	 * 字符串常量：HTML 不间断空格转义 {@code "&nbsp;" -> " "}
 	 */
 	String HTML_NBSP = XmlUtil.NBSP;
 

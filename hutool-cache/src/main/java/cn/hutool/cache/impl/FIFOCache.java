@@ -16,7 +16,7 @@ import java.util.LinkedHashMap;
  * @param <V> 值类型
  * @author Looly
  */
-public class FIFOCache<K, V> extends AbstractCache<K, V> {
+public class FIFOCache<K, V> extends StampedCache<K, V> {
 	private static final long serialVersionUID = 1L;
 
 	/**
@@ -50,21 +50,28 @@ public class FIFOCache<K, V> extends AbstractCache<K, V> {
 		CacheObj<K, V> first = null;
 
 		// 清理过期对象并找出链表头部元素（先入元素）
-		Iterator<CacheObj<K, V>> values = cacheMap.values().iterator();
-		while (values.hasNext()) {
-			CacheObj<K, V> co = values.next();
-			if (co.isExpired()) {
-				values.remove();
-				count++;
+		final Iterator<CacheObj<K, V>> values = cacheObjIter();
+		if (isPruneExpiredActive()) {
+			// 清理过期对象并找出链表头部元素（先入元素）
+			while (values.hasNext()) {
+				CacheObj<K, V> co = values.next();
+				if (co.isExpired()) {
+					values.remove();
+					onRemove(co.key, co.obj);
+					count++;
+					continue;
+				}
+				if (first == null) {
+					first = co;
+				}
 			}
-			if (first == null) {
-				first = co;
-			}
+		} else {
+			first = values.hasNext() ? values.next() : null;
 		}
 
 		// 清理结束后依旧是满的，则删除第一个被缓存的对象
 		if (isFull() && null != first) {
-			cacheMap.remove(first.key);
+			removeWithoutLock(first.key, false);
 			onRemove(first.key, first.obj);
 			count++;
 		}

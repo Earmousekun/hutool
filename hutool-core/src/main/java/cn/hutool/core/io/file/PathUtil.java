@@ -4,6 +4,7 @@ import cn.hutool.core.io.IORuntimeException;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.io.file.visitor.CopyVisitor;
 import cn.hutool.core.io.file.visitor.DelVisitor;
+import cn.hutool.core.io.file.visitor.MoveVisitor;
 import cn.hutool.core.lang.Assert;
 import cn.hutool.core.util.CharsetUtil;
 
@@ -16,8 +17,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.CopyOption;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
@@ -51,6 +54,19 @@ public class PathUtil {
 		} catch (IOException e) {
 			throw new IORuntimeException(e);
 		}
+	}
+
+	/**
+	 * 递归遍历目录以及子目录中的所有文件<br>
+	 * 如果提供path为文件，直接返回过滤结果
+	 *
+	 * @param path       当前遍历文件或目录
+	 * @param fileFilter 文件过滤规则对象，选择要保留的文件，只对文件有效，不过滤目录，null表示接收全部文件
+	 * @return 文件列表
+	 * @since 5.4.1
+	 */
+	public static List<File> loopFiles(Path path, FileFilter fileFilter) {
+		return loopFiles(path, -1, fileFilter);
 	}
 
 	/**
@@ -144,7 +160,7 @@ public class PathUtil {
 			if (isDirectory(path)) {
 				Files.walkFileTree(path, DelVisitor.INSTANCE);
 			} else {
-				Files.delete(path);
+				delFile(path);
 			}
 		} catch (IOException e) {
 			throw new IORuntimeException(e);
@@ -179,7 +195,7 @@ public class PathUtil {
 	 */
 	public static Path copyFile(Path src, Path target, CopyOption... options) throws IORuntimeException {
 		Assert.notNull(src, "Source File is null !");
-		Assert.notNull(target, "Destination File or directiory is null !");
+		Assert.notNull(target, "Destination File or directory is null !");
 
 		final Path targetPath = isDirectory(target) ? target.resolve(src.getFileName()) : target;
 		// 创建级联父目录
@@ -208,6 +224,9 @@ public class PathUtil {
 	 * @since 5.5.1
 	 */
 	public static Path copy(Path src, Path target, CopyOption... options) throws IORuntimeException {
+		Assert.notNull(src, "Src path must be not null !");
+		Assert.notNull(target, "Target path must be not null !");
+
 		if (isDirectory(src)) {
 			return copyContent(src, target.resolve(src.getFileName()), options);
 		}
@@ -229,8 +248,11 @@ public class PathUtil {
 	 * @since 5.5.1
 	 */
 	public static Path copyContent(Path src, Path target, CopyOption... options) throws IORuntimeException {
+		Assert.notNull(src, "Src path must be not null !");
+		Assert.notNull(target, "Target path must be not null !");
+
 		try {
-			Files.walkFileTree(src, new CopyVisitor(src, target));
+			Files.walkFileTree(src, new CopyVisitor(src, target, options));
 		} catch (IOException e) {
 			throw new IORuntimeException(e);
 		}
@@ -404,7 +426,7 @@ public class PathUtil {
 	 * @return byte数组
 	 * @since 5.5.4
 	 */
-	public static byte[] readBytes(Path path){
+	public static byte[] readBytes(Path path) {
 		try {
 			return Files.readAllBytes(path);
 		} catch (IOException e) {
@@ -449,7 +471,12 @@ public class PathUtil {
 
 	/**
 	 * 移动文件或目录<br>
-	 * 当目标是目录时，会将源文件或文件夹整体移动至目标目录下
+	 * 当目标是目录时，会将源文件或文件夹整体移动至目标目录下<br>
+	 * 例如：
+	 * <ul>
+	 *     <li>move("/usr/aaa/abc.txt", "/usr/bbb")结果为："/usr/bbb/abc.txt"</li>
+	 *     <li>move("/usr/aaa", "/usr/bbb")结果为："/usr/bbb/aaa"</li>
+	 * </ul>
 	 *
 	 * @param src        源文件或目录路径
 	 * @param target     目标路径，如果为目录，则移动到此目录下
@@ -460,16 +487,50 @@ public class PathUtil {
 	public static Path move(Path src, Path target, boolean isOverride) {
 		Assert.notNull(src, "Src path must be not null !");
 		Assert.notNull(target, "Target path must be not null !");
-		final CopyOption[] options = isOverride ? new CopyOption[]{StandardCopyOption.REPLACE_EXISTING} : new CopyOption[]{};
+
 		if (isDirectory(target)) {
 			target = target.resolve(src.getFileName());
 		}
+		return moveContent(src, target, isOverride);
+	}
+
+	/**
+	 * 移动文件或目录内容到目标目录中，例如：
+	 * <ul>
+	 *     <li>moveContent("/usr/aaa/abc.txt", "/usr/bbb")结果为："/usr/bbb/abc.txt"</li>
+	 *     <li>moveContent("/usr/aaa", "/usr/bbb")结果为："/usr/bbb"</li>
+	 * </ul>
+	 *
+	 * @param src        源文件或目录路径
+	 * @param target     目标路径，如果为目录，则移动到此目录下
+	 * @param isOverride 是否覆盖目标文件
+	 * @return 目标文件Path
+	 * @since 5.7.9
+	 */
+	public static Path moveContent(Path src, Path target, boolean isOverride) {
+		Assert.notNull(src, "Src path must be not null !");
+		Assert.notNull(target, "Target path must be not null !");
+		final CopyOption[] options = isOverride ? new CopyOption[]{StandardCopyOption.REPLACE_EXISTING} : new CopyOption[]{};
+
 		// 自动创建目标的父目录
 		mkParentDirs(target);
 		try {
 			return Files.move(src, target, options);
 		} catch (IOException e) {
-			throw new IORuntimeException(e);
+			if(e instanceof FileAlreadyExistsException){
+				// 目标文件已存在，直接抛出异常
+				// issue#I4QV0L@Gitee
+				throw new IORuntimeException(e);
+			}
+			// 移动失败，可能是跨分区移动导致的，采用递归移动方式
+			try {
+				Files.walkFileTree(src, new MoveVisitor(src, target, options));
+				// 移动后空目录没有删除，
+				del(src);
+			} catch (IOException e2) {
+				throw new IORuntimeException(e2);
+			}
+			return target;
 		}
 	}
 
@@ -551,7 +612,7 @@ public class PathUtil {
 	 * @return 转换后的Path
 	 * @since 5.5.5
 	 */
-	public static Path toAbsNormal(Path path){
+	public static Path toAbsNormal(Path path) {
 		Assert.notNull(path);
 		return path.toAbsolutePath().normalize();
 	}
@@ -561,8 +622,8 @@ public class PathUtil {
 	 *
 	 * @param file 文件
 	 * @return MimeType
-	 * @since 5.5.5
 	 * @see Files#probeContentType(Path)
+	 * @since 5.5.5
 	 */
 	public static String getMimeType(Path file) {
 		try {
@@ -599,5 +660,37 @@ public class PathUtil {
 	 */
 	public static Path mkParentDirs(Path path) {
 		return mkdir(path.getParent());
+	}
+
+	/**
+	 * 获取{@link Path}文件名
+	 *
+	 * @param path {@link Path}
+	 * @return 文件名
+	 * @since 5.7.15
+	 */
+	public static String getName(Path path) {
+		if (null == path) {
+			return null;
+		}
+		return path.getFileName().toString();
+	}
+
+	/**
+	 * 删除文件或空目录，不追踪软链
+	 *
+	 * @param path 文件对象
+	 * @throws IOException IO异常
+	 * @since 5.7.7
+	 */
+	protected static void delFile(Path path) throws IOException {
+		try {
+			Files.delete(path);
+		} catch (AccessDeniedException e) {
+			// 可能遇到只读文件，无法删除.使用 file 方法删除
+			if (false == path.toFile().delete()) {
+				throw e;
+			}
+		}
 	}
 }

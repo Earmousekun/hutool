@@ -2,6 +2,7 @@ package cn.hutool.core.util;
 
 import cn.hutool.core.text.CharSequenceUtil;
 import cn.hutool.core.text.StrBuilder;
+import cn.hutool.core.text.StrFormatter;
 import cn.hutool.core.text.StrPool;
 import cn.hutool.core.text.TextSimilarity;
 
@@ -176,7 +177,7 @@ public class StrUtil extends CharSequenceUtil implements StrPool {
 	 * @return 字符串
 	 */
 	public static String str(byte[] bytes, String charset) {
-		return str(bytes, isBlank(charset) ? Charset.defaultCharset() : Charset.forName(charset));
+		return str(bytes, CharsetUtil.charset(charset));
 	}
 
 	/**
@@ -205,7 +206,7 @@ public class StrUtil extends CharSequenceUtil implements StrPool {
 	 * @return 字符串
 	 */
 	public static String str(Byte[] bytes, String charset) {
-		return str(bytes, isBlank(charset) ? Charset.defaultCharset() : Charset.forName(charset));
+		return str(bytes, CharsetUtil.charset(charset));
 	}
 
 	/**
@@ -242,7 +243,7 @@ public class StrUtil extends CharSequenceUtil implements StrPool {
 			return null;
 		}
 
-		return str(data, Charset.forName(charset));
+		return str(data, CharsetUtil.charset(charset));
 	}
 
 	/**
@@ -269,6 +270,17 @@ public class StrUtil extends CharSequenceUtil implements StrPool {
 	 */
 	public static String toString(Object obj) {
 		return String.valueOf(obj);
+	}
+
+	/**
+	 * 调用对象的toString方法，null会返回{@code null}
+	 *
+	 * @param obj 对象
+	 * @return 字符串 or {@code null}
+	 * @since 5.7.17
+	 */
+	public static String toStringOrNull(Object obj) {
+		return null == obj ? null : obj.toString();
 	}
 
 	/**
@@ -454,22 +466,6 @@ public class StrUtil extends CharSequenceUtil implements StrPool {
 	 * @since 5.4.3
 	 */
 	public static String format(CharSequence template, Map<?, ?> map, boolean ignoreNull) {
-		if (null == template) {
-			return null;
-		}
-		if (null == map || map.isEmpty()) {
-			return template.toString();
-		}
-
-		String template2 = template.toString();
-		String value;
-		for (Map.Entry<?, ?> entry : map.entrySet()) {
-			value = utf8Str(entry.getValue());
-			if (null == value && ignoreNull) {
-				continue;
-			}
-			template2 = replace(template2, "{" + entry.getKey() + "}", value);
-		}
-		return template2;
+		return StrFormatter.format(template, map, ignoreNull);
 	}
 }

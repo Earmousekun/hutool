@@ -1,10 +1,12 @@
 package cn.hutool.core.util;
 
 import cn.hutool.core.exceptions.UtilException;
+import cn.hutool.core.lang.Assert;
 import cn.hutool.core.lang.ObjectId;
 import cn.hutool.core.lang.Singleton;
 import cn.hutool.core.lang.Snowflake;
 import cn.hutool.core.lang.UUID;
+import cn.hutool.core.lang.id.NanoId;
 import cn.hutool.core.net.NetUtil;
 
 /**
@@ -105,7 +107,7 @@ public class IdUtil {
 	 * @param workerId     终端ID
 	 * @param datacenterId 数据中心ID
 	 * @return {@link Snowflake}
-	 * @deprecated 此方法容易产生起义：多个Snowflake实例产生的ID会产生重复，此对象在单台机器上必须单例！
+	 * @deprecated 此方法容易产生歧义：多个Snowflake实例产生的ID会产生重复，此对象在单台机器上必须单例，请使用{@link #getSnowflake(long, long)}
 	 */
 	@Deprecated
 	public static Snowflake createSnowflake(long workerId, long datacenterId) {
@@ -157,7 +159,7 @@ public class IdUtil {
 	 * <p>
 	 * 参考：http://www.cnblogs.com/relucent/p/4955340.html
 	 *
-	 * @param workerId     终端ID
+	 * @param workerId 终端ID
 	 * @return {@link Snowflake}
 	 * @since 5.7.3
 	 */
@@ -202,8 +204,17 @@ public class IdUtil {
 	 * @since 5.7.3
 	 */
 	public static long getDataCenterId(long maxDatacenterId) {
+		Assert.isTrue(maxDatacenterId > 0, "maxDatacenterId must be > 0");
+		if(maxDatacenterId == Long.MAX_VALUE){
+			maxDatacenterId -= 1;
+		}
 		long id = 1L;
-		final byte[] mac = NetUtil.getLocalHardwareAddress();
+		byte[] mac = null;
+		try{
+			mac = NetUtil.getLocalHardwareAddress();
+		}catch (UtilException ignore){
+			// ignore
+		}
 		if (null != mac) {
 			id = ((0x000000FF & (long) mac[mac.length - 2])
 					| (0x0000FF00 & (((long) mac[mac.length - 1]) << 8))) >> 6;
@@ -223,6 +234,7 @@ public class IdUtil {
 	 *
 	 * @param datacenterId 数据中心ID
 	 * @param maxWorkerId  最大的机器节点ID
+	 * @return ID
 	 * @since 5.7.3
 	 */
 	public static long getWorkerId(long datacenterId, long maxWorkerId) {
@@ -238,4 +250,50 @@ public class IdUtil {
 		 */
 		return (mpid.toString().hashCode() & 0xffff) % (maxWorkerId + 1);
 	}
+
+	// ------------------------------------------------------------------- NanoId
+
+	/**
+	 * 获取随机NanoId
+	 *
+	 * @return 随机NanoId
+	 * @since 5.7.5
+	 */
+	public static String nanoId() {
+		return NanoId.randomNanoId();
+	}
+
+	/**
+	 * 获取随机NanoId
+	 *
+	 * @param size ID中的字符数量
+	 * @return 随机NanoId
+	 * @since 5.7.5
+	 */
+	public static String nanoId(int size) {
+		return NanoId.randomNanoId(size);
+	}
+
+	/**
+	 * 简单获取Snowflake 的 nextId
+	 * 终端ID 数据中心ID 默认为1
+	 *
+	 * @return nextId
+	 * @since 5.7.18
+	 */
+	public static long getSnowflakeNextId() {
+		return getSnowflake().nextId();
+	}
+
+	/**
+	 * 简单获取Snowflake 的 nextId
+	 * 终端ID 数据中心ID 默认为1
+	 *
+	 * @return nextIdStr
+	 * @since 5.7.18
+	 */
+	public static String getSnowflakeNextIdStr() {
+		return getSnowflake().nextIdStr();
+	}
+
 }

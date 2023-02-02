@@ -68,8 +68,8 @@ public class IdUtilTest {
 	}
 
 	@Test
-	public void createSnowflakeTest() {
-		Snowflake snowflake = IdUtil.createSnowflake(1, 1);
+	public void getSnowflakeTest() {
+		Snowflake snowflake = IdUtil.getSnowflake(1, 1);
 		long id = snowflake.nextId();
 		Assert.assertTrue(id > 0);
 	}
@@ -78,7 +78,7 @@ public class IdUtilTest {
 	@Ignore
 	public void snowflakeBenchTest() {
 		final Set<Long> set = new ConcurrentHashSet<>();
-		final Snowflake snowflake = IdUtil.createSnowflake(1, 1);
+		final Snowflake snowflake = IdUtil.getSnowflake(1, 1);
 
 		//线程数
 		int threadCount = 100;
@@ -137,7 +137,8 @@ public class IdUtilTest {
 
 	@Test
 	public void getDataCenterIdTest(){
+		//按照mac地址算法拼接的算法，maxDatacenterId应该是0xffffffffL>>6-1此处暂时按照0x7fffffffffffffffL-1，防止最后取模溢出
 		final long dataCenterId = IdUtil.getDataCenterId(Long.MAX_VALUE);
-		Assert.assertTrue(dataCenterId > 1);
+		Assert.assertTrue(dataCenterId >= 0);
 	}
 }

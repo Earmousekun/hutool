@@ -19,19 +19,31 @@ import org.bouncycastle.crypto.signers.DSAEncoding;
 import org.bouncycastle.crypto.signers.PlainDSAEncoding;
 import org.bouncycastle.crypto.signers.SM2Signer;
 import org.bouncycastle.crypto.signers.StandardDSAEncoding;
+import org.bouncycastle.util.BigIntegers;
+import org.bouncycastle.util.encoders.Hex;
 
+import java.math.BigInteger;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 
 /**
- * 国密SM2算法实现，基于BC库<br>
+ * 国密SM2非对称算法实现，基于BC库<br>
  * SM2算法只支持公钥加密，私钥解密<br>
  * 参考：https://blog.csdn.net/pridas/article/details/86118774
+ *
+ * <p>
+ * 国密算法包括：
+ * <ol>
+ *     <li>非对称加密和签名：SM2</li>
+ *     <li>摘要签名算法：SM3</li>
+ *     <li>对称加密：SM4</li>
+ * </ol>
  *
  * @author looly
  * @since 4.3.2
  */
 public class SM2 extends AbstractAsymmetricCrypto<SM2> {
+	private static final long serialVersionUID = 1L;
 
 	/**
 	 * 算法EC
@@ -173,12 +185,30 @@ public class SM2 extends AbstractAsymmetricCrypto<SM2> {
 	// --------------------------------------------------------------------------------- Encrypt
 
 	/**
-	 * 加密，SM2非对称加密的结果由C1,C2,C3三部分组成，其中：
+	 * 使用公钥加密，SM2非对称加密的结果由C1,C3,C2三部分组成，其中：
 	 *
 	 * <pre>
 	 * C1 生成随机数的计算出的椭圆曲线点
-	 * C2 密文数据
 	 * C3 SM3的摘要值
+	 * C2 密文数据
+	 * </pre>
+	 *
+	 * @param data    被加密的bytes
+	 * @return 加密后的bytes
+	 * @throws CryptoException 包括InvalidKeyException和InvalidCipherTextException的包装异常
+	 * @since 5.7.10
+	 */
+	public byte[] encrypt(byte[] data) throws CryptoException {
+		return encrypt(data, KeyType.PublicKey);
+	}
+
+	/**
+	 * 加密，SM2非对称加密的结果由C1,C3,C2三部分组成，其中：
+	 *
+	 * <pre>
+	 * C1 生成随机数的计算出的椭圆曲线点
+	 * C3 SM3的摘要值
+	 * C2 密文数据
 	 * </pre>
 	 *
 	 * @param data    被加密的bytes
@@ -223,6 +253,18 @@ public class SM2 extends AbstractAsymmetricCrypto<SM2> {
 	}
 
 	// --------------------------------------------------------------------------------- Decrypt
+
+	/**
+	 * 使用私钥解密
+	 *
+	 * @param data    SM2密文，实际包含三部分：ECC公钥、真正的密文、公钥和原文的SM3-HASH值
+	 * @return 加密后的bytes
+	 * @throws CryptoException 包括InvalidKeyException和InvalidCipherTextException的包装异常
+	 * @since 5.7.10
+	 */
+	public byte[] decrypt(byte[] data) throws CryptoException {
+		return decrypt(data, KeyType.PrivateKey);
+	}
 
 	/**
 	 * 解密
@@ -275,7 +317,7 @@ public class SM2 extends AbstractAsymmetricCrypto<SM2> {
 
 	/**
 	 * 用私钥对信息生成数字签名，签名格式为ASN1<br>
-	 * 	 * 在硬件签名中，返回结果为R+S，可以通过调用{@link cn.hutool.crypto.SmUtil#rsAsn1ToPlain(byte[])}方法转换之。
+	 * * 在硬件签名中，返回结果为R+S，可以通过调用{@link cn.hutool.crypto.SmUtil#rsAsn1ToPlain(byte[])}方法转换之。
 	 *
 	 * @param data 加密数据
 	 * @return 签名
@@ -480,7 +522,27 @@ public class SM2 extends AbstractAsymmetricCrypto<SM2> {
 	 * @since 5.5.9
 	 */
 	public byte[] getD() {
-		return this.privateKeyParams.getD().toByteArray();
+		return BigIntegers.asUnsignedByteArray(32,getDBigInteger());
+	}
+
+	/**
+	 * 获得私钥D值（编码后的私钥）
+	 *
+	 * @return D值
+	 * @since 5.7.17
+	 */
+	public String getDHex() {
+		return new String(Hex.encode(getD()));
+	}
+
+	/**
+	 * 获得私钥D值
+	 *
+	 * @return D值
+	 * @since 5.7.17
+	 */
+	public BigInteger getDBigInteger() {
+		return this.privateKeyParams.getD();
 	}
 
 	/**

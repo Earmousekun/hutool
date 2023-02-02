@@ -1,6 +1,7 @@
 package cn.hutool.core.util;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.collection.ListUtil;
 import cn.hutool.core.date.DateField;
 import cn.hutool.core.date.DateTime;
 import cn.hutool.core.date.DateUtil;
@@ -125,6 +126,21 @@ public class RandomUtil {
 	}
 
 	/**
+	 * 获取algorithms/providers中提供的强安全随机生成器<br>
+	 * 注意：此方法可能造成阻塞或性能问题
+	 *
+	 * @return {@link SecureRandom}
+	 * @since 5.7.12
+	 */
+	public static SecureRandom getSecureRandomStrong() {
+		try {
+			return SecureRandom.getInstanceStrong();
+		} catch (NoSuchAlgorithmException e) {
+			throw new UtilException(e);
+		}
+	}
+
+	/**
 	 * 获取随机数产生器
 	 *
 	 * @param isSecure 是否为强随机数生成器 (RNG)
@@ -145,6 +161,16 @@ public class RandomUtil {
 	 */
 	public static boolean randomBoolean() {
 		return 0 == randomInt(2);
+	}
+
+	/**
+	 * 随机汉字（'\u4E00'-'\u9FFF'）
+	 *
+	 * @return 随机的汉字字符
+	 * @since 5.7.15
+	 */
+	public static char randomChinese() {
+		return (char) randomInt('\u4E00', '\u9FFF');
 	}
 
 	/**
@@ -418,7 +444,7 @@ public class RandomUtil {
 	 */
 	public static <T> List<T> randomEleList(List<T> source, int count) {
 		if (count >= source.size()) {
-			return source;
+			return ListUtil.toList(source);
 		}
 		final int[] randomList = ArrayUtil.sub(randomInts(source.size()), 0, count);
 		List<T> result = new ArrayList<>();
@@ -490,15 +516,15 @@ public class RandomUtil {
 	}
 
 	/**
-	 * 获得一个随机的字符串（只包含数字和字符） 并排除指定字符串
+	 * 获得一个随机的字符串（只包含数字和小写字母） 并排除指定字符串
 	 *
 	 * @param length   字符串的长度
-	 * @param elemData 要排除的字符串,如：去重容易混淆的字符串，oO0、lL1、q9Q、pP
+	 * @param elemData 要排除的字符串,如：去重容易混淆的字符串，oO0、lL1、q9Q、pP，不区分大小写
 	 * @return 随机字符串
 	 */
 	public static String randomStringWithoutStr(int length, String elemData) {
 		String baseStr = BASE_CHAR_NUMBER;
-		baseStr = StrUtil.removeAll(baseStr, elemData.toCharArray());
+		baseStr = StrUtil.removeAll(baseStr, elemData.toLowerCase().toCharArray());
 		return randomString(baseStr, length);
 	}
 
@@ -523,11 +549,11 @@ public class RandomUtil {
 		if (StrUtil.isEmpty(baseString)) {
 			return StrUtil.EMPTY;
 		}
-		final StringBuilder sb = new StringBuilder(length);
-
 		if (length < 1) {
 			length = 1;
 		}
+
+		final StringBuilder sb = new StringBuilder(length);
 		int baseLength = baseString.length();
 		for (int i = 0; i < length; i++) {
 			int number = randomInt(baseLength);

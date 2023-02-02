@@ -100,7 +100,8 @@ public class Scheduler implements Serializable {
 
 	/**
 	 * 设置是否为守护线程<br>
-	 * 如果为true，则在调用{@link #stop()}方法后执行的定时任务立即结束，否则等待执行完毕才结束。默认非守护线程
+	 * 如果为true，则在调用{@link #stop()}方法后执行的定时任务立即结束，否则等待执行完毕才结束。默认非守护线程<br>
+	 * 如果用户调用{@link #setThreadExecutor(ExecutorService)}自定义线程池则此参数无效
 	 *
 	 * @param on {@code true}为守护线程，否则非守护线程
 	 * @return this
@@ -109,10 +110,28 @@ public class Scheduler implements Serializable {
 	public Scheduler setDaemon(boolean on) throws CronException {
 		lock.lock();
 		try {
-			if (this.started) {
-				throw new CronException("Scheduler already started!");
-			}
+			checkStarted();
 			this.daemon = on;
+		} finally {
+			lock.unlock();
+		}
+		return this;
+	}
+
+	/**
+	 * 设置自定义线程池<br>
+	 * 自定义线程池时须考虑方法执行的线程是否为守护线程
+	 *
+	 * @param threadExecutor 自定义线程池
+	 * @return this
+	 * @throws CronException 定时任务已经启动抛出此异常
+	 * @since 5.7.10
+	 */
+	public Scheduler setThreadExecutor(ExecutorService threadExecutor) throws CronException {
+		lock.lock();
+		try {
+			checkStarted();
+			this.threadExecutor = threadExecutor;
 		} finally {
 			lock.unlock();
 		}
@@ -192,7 +211,8 @@ public class Scheduler implements Serializable {
 					final String pattern = entry.getValue();
 					StaticLog.debug("Load job: {} {}", pattern, jobClass);
 					try {
-						schedule(pattern, new InvokeTask(jobClass));
+						// issue#I5E7BM@Gitee，自定义ID避免重复从配置文件加载
+						schedule("id_" + jobClass, pattern, new InvokeTask(jobClass));
 					} catch (Exception e) {
 						throw new CronException(e, "Schedule [{}] [{}] error!", pattern, jobClass);
 					}
@@ -270,8 +290,19 @@ public class Scheduler implements Serializable {
 	 * @return this
 	 */
 	public Scheduler deschedule(String id) {
-		this.taskTable.remove(id);
+		descheduleWithStatus(id);
 		return this;
+	}
+
+	/**
+	 * 移除Task，并返回是否移除成功
+	 *
+	 * @param id Task的ID
+	 * @return 是否移除成功，{@code false}表示未找到对应ID的任务
+	 * @since 5.7.17
+	 */
+	public boolean descheduleWithStatus(String id) {
+		return this.taskTable.remove(id);
 	}
 
 	/**
@@ -376,14 +407,14 @@ public class Scheduler implements Serializable {
 	public Scheduler start() {
 		lock.lock();
 		try {
-			if (this.started) {
-				throw new CronException("Schedule is started!");
-			}
+			checkStarted();
 
-			// 无界线程池，确保每一个需要执行的线程都可以及时运行，同时复用已有线程避免线程重复创建
-			this.threadExecutor = ExecutorBuilder.create().useSynchronousQueue().setThreadFactory(//
-					ThreadFactoryBuilder.create().setNamePrefix("hutool-cron-").setDaemon(this.daemon).build()//
-			).build();
+			if(null == this.threadExecutor){
+				// 无界线程池，确保每一个需要执行的线程都可以及时运行，同时复用已有线程避免线程重复创建
+				this.threadExecutor = ExecutorBuilder.create().useSynchronousQueue().setThreadFactory(//
+						ThreadFactoryBuilder.create().setNamePrefix("hutool-cron-").setDaemon(this.daemon).build()//
+				).build();
+			}
 			this.taskLauncherManager = new TaskLauncherManager(this);
 			this.taskExecutorManager = new TaskExecutorManager(this);
 
@@ -445,4 +476,14 @@ public class Scheduler implements Serializable {
 		return this;
 	}
 
+	/**
+	 * 检查定时任务是否已经启动
+	 *
+	 * @throws CronException 已经启动则抛出此异常
+	 */
+	private void checkStarted() throws CronException{
+		if (this.started) {
+			throw new CronException("Scheduler already started!");
+		}
+	}
 }

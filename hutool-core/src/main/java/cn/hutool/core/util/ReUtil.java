@@ -1,20 +1,26 @@
 package cn.hutool.core.util;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.comparator.LengthComparator;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.exceptions.UtilException;
-import cn.hutool.core.lang.Holder;
+import cn.hutool.core.lang.Assert;
 import cn.hutool.core.lang.PatternPool;
 import cn.hutool.core.lang.RegexPool;
 import cn.hutool.core.lang.Validator;
 import cn.hutool.core.lang.func.Func1;
+import cn.hutool.core.lang.mutable.Mutable;
+import cn.hutool.core.lang.mutable.MutableObj;
+import cn.hutool.core.map.MapUtil;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -78,13 +84,29 @@ public class ReUtil {
 			return null;
 		}
 
-		// Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
 		final Pattern pattern = PatternPool.get(regex, Pattern.DOTALL);
 		return get(pattern, content, groupIndex);
 	}
 
 	/**
-	 * 获得匹配的字符串，，获得正则中分组0的内容
+	 * 获得匹配的字符串
+	 *
+	 * @param regex     匹配的正则
+	 * @param content   被匹配的内容
+	 * @param groupName 匹配正则的分组名称
+	 * @return 匹配后得到的字符串，未匹配返回null
+	 */
+	public static String get(String regex, CharSequence content, String groupName) {
+		if (null == content || null == regex) {
+			return null;
+		}
+
+		final Pattern pattern = PatternPool.get(regex, Pattern.DOTALL);
+		return get(pattern, content, groupName);
+	}
+
+	/**
+	 * 获得匹配的字符串，获得正则中分组0的内容
 	 *
 	 * @param pattern 编译后的正则模式
 	 * @param content 被匹配的内容
@@ -96,7 +118,7 @@ public class ReUtil {
 	}
 
 	/**
-	 * 获得匹配的字符串，，获得正则中分组1的内容
+	 * 获得匹配的字符串，获得正则中分组1的内容
 	 *
 	 * @param pattern 编译后的正则模式
 	 * @param content 被匹配的内容
@@ -120,11 +142,47 @@ public class ReUtil {
 			return null;
 		}
 
-		final Matcher matcher = pattern.matcher(content);
-		if (matcher.find()) {
-			return matcher.group(groupIndex);
+		final MutableObj<String> result = new MutableObj<>();
+		get(pattern, content, matcher -> result.set(matcher.group(groupIndex)));
+		return result.get();
+	}
+
+	/**
+	 * 获得匹配的字符串
+	 *
+	 * @param pattern   匹配的正则
+	 * @param content   被匹配的内容
+	 * @param groupName 匹配正则的分组名称
+	 * @return 匹配后得到的字符串，未匹配返回null
+	 * @since 5.7.15
+	 */
+	public static String get(Pattern pattern, CharSequence content, String groupName) {
+		if (null == content || null == pattern || null == groupName) {
+			return null;
 		}
-		return null;
+
+		final MutableObj<String> result = new MutableObj<>();
+		get(pattern, content, matcher -> result.set(matcher.group(groupName)));
+		return result.get();
+	}
+
+	/**
+	 * 在给定字符串中查找给定规则的字符，如果找到则使用{@link Consumer}处理之<br>
+	 * 如果内容中有多个匹配项，则只处理找到的第一个结果。
+	 *
+	 * @param pattern  匹配的正则
+	 * @param content  被匹配的内容
+	 * @param consumer 匹配到的内容处理器
+	 * @since 5.7.15
+	 */
+	public static void get(Pattern pattern, CharSequence content, Consumer<Matcher> consumer) {
+		if (null == content || null == pattern || null == consumer) {
+			return;
+		}
+		final Matcher m = pattern.matcher(content);
+		if (m.find()) {
+			consumer.accept(m);
+		}
 	}
 
 	/**
@@ -149,18 +207,63 @@ public class ReUtil {
 	 * @since 4.0.13
 	 */
 	public static List<String> getAllGroups(Pattern pattern, CharSequence content, boolean withGroup0) {
+		return getAllGroups(pattern, content, withGroup0, false);
+	}
+
+	/**
+	 * 获得匹配的字符串匹配到的所有分组
+	 *
+	 * @param pattern    编译后的正则模式
+	 * @param content    被匹配的内容
+	 * @param withGroup0 是否包括分组0，此分组表示全匹配的信息
+	 * @param findAll 是否查找所有匹配到的内容，{@code false}表示只读取第一个匹配到的内容
+	 * @return 匹配后得到的字符串数组，按照分组顺序依次列出，未匹配到返回空列表，任何一个参数为null返回null
+	 * @since 4.0.13
+	 */
+	public static List<String> getAllGroups(Pattern pattern, CharSequence content, boolean withGroup0, boolean findAll) {
 		if (null == content || null == pattern) {
 			return null;
 		}
 
 		ArrayList<String> result = new ArrayList<>();
 		final Matcher matcher = pattern.matcher(content);
-		if (matcher.find()) {
+		while (matcher.find()) {
 			final int startGroup = withGroup0 ? 0 : 1;
 			final int groupCount = matcher.groupCount();
 			for (int i = startGroup; i <= groupCount; i++) {
 				result.add(matcher.group(i));
 			}
+
+			if(false == findAll){
+				break;
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * 根据给定正则查找字符串中的匹配项，返回所有匹配的分组名对应分组值<br>
+	 * <pre>
+	 * pattern: (?&lt;year&gt;\\d+)-(?&lt;month&gt;\\d+)-(?&lt;day&gt;\\d+)
+	 * content: 2021-10-11
+	 * result : year: 2021, month: 10, day: 11
+	 * </pre>
+	 *
+	 * @param pattern 匹配的正则
+	 * @param content 被匹配的内容
+	 * @return 命名捕获组，key为分组名，value为对应值
+	 * @since 5.7.15
+	 */
+	public static Map<String, String> getAllGroupNames(Pattern pattern, CharSequence content) {
+		if (null == content || null == pattern) {
+			return null;
+		}
+		final Matcher m = pattern.matcher(content);
+		final Map<String, String> result = MapUtil.newHashMap(m.groupCount());
+		if (m.find()) {
+			// 通过反射获取 namedGroups 方法
+			final Map<String, Integer> map = ReflectUtil.invoke(pattern, "namedGroups");
+			map.forEach((key, value) -> result.put(key, m.group(value)));
 		}
 		return result;
 	}
@@ -213,7 +316,6 @@ public class ReUtil {
 			return null;
 		}
 
-		// Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
 		final Pattern pattern = PatternPool.get(regex, Pattern.DOTALL);
 		return extractMulti(pattern, content, template);
 	}
@@ -228,8 +330,9 @@ public class ReUtil {
 	 * @param contentHolder 被匹配的内容的Holder，value为内容正文，经过这个方法的原文将被去掉匹配之前的内容
 	 * @param template      生成内容模板，变量 $1 表示group1的内容，以此类推
 	 * @return 新字符串
+	 * @since 5.8.0
 	 */
-	public static String extractMultiAndDelPre(Pattern pattern, Holder<CharSequence> contentHolder, String template) {
+	public static String extractMultiAndDelPre(Pattern pattern, Mutable<CharSequence> contentHolder, String template) {
 		if (null == contentHolder || null == pattern || null == template) {
 			return null;
 		}
@@ -259,12 +362,11 @@ public class ReUtil {
 	 * @param template      生成内容模板，变量 $1 表示group1的内容，以此类推
 	 * @return 按照template拼接后的字符串
 	 */
-	public static String extractMultiAndDelPre(String regex, Holder<CharSequence> contentHolder, String template) {
+	public static String extractMultiAndDelPre(String regex, Mutable<CharSequence> contentHolder, String template) {
 		if (null == contentHolder || null == regex || null == template) {
 			return null;
 		}
 
-		// Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
 		final Pattern pattern = PatternPool.get(regex, Pattern.DOTALL);
 		return extractMultiAndDelPre(pattern, contentHolder, template);
 	}
@@ -281,7 +383,6 @@ public class ReUtil {
 			return StrUtil.str(content);
 		}
 
-		// Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
 		final Pattern pattern = PatternPool.get(regex, Pattern.DOTALL);
 		return delFirst(pattern, content);
 	}
@@ -300,8 +401,8 @@ public class ReUtil {
 	/**
 	 * 替换匹配的第一个内容
 	 *
-	 * @param pattern 正则
-	 * @param content 被匹配的内容
+	 * @param pattern     正则
+	 * @param content     被匹配的内容
 	 * @param replacement 替换的内容
 	 * @return 替换后剩余的内容
 	 * @since 5.6.5
@@ -342,7 +443,7 @@ public class ReUtil {
 	public static String delLast(Pattern pattern, CharSequence str) {
 		if (null != pattern && StrUtil.isNotEmpty(str)) {
 			final MatchResult matchResult = lastIndexOf(pattern, str);
-			if(null != matchResult){
+			if (null != matchResult) {
 				return StrUtil.subPre(str, matchResult.start()) + StrUtil.subSuf(str, matchResult.end());
 			}
 		}
@@ -362,7 +463,6 @@ public class ReUtil {
 			return StrUtil.str(content);
 		}
 
-		// Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
 		final Pattern pattern = PatternPool.get(regex, Pattern.DOTALL);
 		return delAll(pattern, content);
 	}
@@ -394,9 +494,23 @@ public class ReUtil {
 			return StrUtil.str(content);
 		}
 
-		// Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
 		final Pattern pattern = PatternPool.get(regex, Pattern.DOTALL);
-		Matcher matcher = pattern.matcher(content);
+		return delPre(pattern, content);
+	}
+
+	/**
+	 * 删除正则匹配到的内容之前的字符 如果没有找到，则返回原文
+	 *
+	 * @param pattern 定位正则模式
+	 * @param content 被查找的内容
+	 * @return 删除前缀后的新内容
+	 */
+	public static String delPre(Pattern pattern, CharSequence content) {
+		if (null == content || null == pattern) {
+			return StrUtil.str(content);
+		}
+
+		final Matcher matcher = pattern.matcher(content);
 		if (matcher.find()) {
 			return StrUtil.sub(content, matcher.end(), content.length());
 		}
@@ -455,7 +569,7 @@ public class ReUtil {
 			return collection;
 		}
 
-		return findAll(Pattern.compile(regex, Pattern.DOTALL), content, group, collection);
+		return findAll(PatternPool.get(regex, Pattern.DOTALL), content, group, collection);
 	}
 
 	/**
@@ -509,16 +623,29 @@ public class ReUtil {
 		if (null == pattern || null == content) {
 			return null;
 		}
+		Assert.notNull(collection, "Collection must be not null !");
 
-		if (null == collection) {
-			throw new NullPointerException("Null collection param provided!");
+		findAll(pattern, content, (matcher) -> collection.add(matcher.group(group)));
+		return collection;
+	}
+
+	/**
+	 * 取得内容中匹配的所有结果，使用{@link Consumer}完成匹配结果处理
+	 *
+	 * @param pattern  编译后的正则模式
+	 * @param content  被查找的内容
+	 * @param consumer 匹配结果处理函数
+	 * @since 5.7.15
+	 */
+	public static void findAll(Pattern pattern, CharSequence content, Consumer<Matcher> consumer) {
+		if (null == pattern || null == content) {
+			return;
 		}
 
 		final Matcher matcher = pattern.matcher(content);
 		while (matcher.find()) {
-			collection.add(matcher.group(group));
+			consumer.accept(matcher);
 		}
-		return collection;
 	}
 
 	/**
@@ -533,7 +660,6 @@ public class ReUtil {
 			return 0;
 		}
 
-		// Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
 		final Pattern pattern = PatternPool.get(regex, Pattern.DOTALL);
 		return count(pattern, content);
 	}
@@ -594,12 +720,12 @@ public class ReUtil {
 	/**
 	 * 找到指定正则匹配到字符串的开始位置
 	 *
-	 * @param regex 正则
+	 * @param regex   正则
 	 * @param content 字符串
 	 * @return 位置，{@code null}表示未找到
 	 * @since 5.6.5
 	 */
-	public static MatchResult indexOf(String regex, CharSequence content){
+	public static MatchResult indexOf(String regex, CharSequence content) {
 		if (null == regex || null == content) {
 			return null;
 		}
@@ -616,10 +742,10 @@ public class ReUtil {
 	 * @return 位置，{@code null}表示未找到
 	 * @since 5.6.5
 	 */
-	public static MatchResult indexOf(Pattern pattern, CharSequence content){
-		if(null != pattern && null != content){
+	public static MatchResult indexOf(Pattern pattern, CharSequence content) {
+		if (null != pattern && null != content) {
 			final Matcher matcher = pattern.matcher(content);
-			if(matcher.find()){
+			if (matcher.find()) {
 				return matcher.toMatchResult();
 			}
 		}
@@ -630,12 +756,12 @@ public class ReUtil {
 	/**
 	 * 找到指定正则匹配到第一个字符串的位置
 	 *
-	 * @param regex 正则
+	 * @param regex   正则
 	 * @param content 字符串
 	 * @return 位置，{@code null}表示未找到
 	 * @since 5.6.5
 	 */
-	public static MatchResult lastIndexOf(String regex, CharSequence content){
+	public static MatchResult lastIndexOf(String regex, CharSequence content) {
 		if (null == regex || null == content) {
 			return null;
 		}
@@ -652,11 +778,11 @@ public class ReUtil {
 	 * @return 位置，{@code null}表示未找到
 	 * @since 5.6.5
 	 */
-	public static MatchResult lastIndexOf(Pattern pattern, CharSequence content){
+	public static MatchResult lastIndexOf(Pattern pattern, CharSequence content) {
 		MatchResult result = null;
-		if(null != pattern && null != content){
+		if (null != pattern && null != content) {
 			final Matcher matcher = pattern.matcher(content);
-			while(matcher.find()){
+			while (matcher.find()) {
 				result = matcher.toMatchResult();
 			}
 		}
@@ -753,12 +879,12 @@ public class ReUtil {
 		final Matcher matcher = pattern.matcher(content);
 		boolean result = matcher.find();
 		if (result) {
-			final Set<String> varNums = findAll(PatternPool.GROUP_VAR, replacementTemplate, 1, new HashSet<>());
+			final Set<String> varNums = findAll(PatternPool.GROUP_VAR, replacementTemplate, 1, new TreeSet<>(LengthComparator.INSTANCE.reversed()));
 			final StringBuffer sb = new StringBuffer();
 			do {
 				String replacement = replacementTemplate;
-				for (String var : varNums) {
-					int group = Integer.parseInt(var);
+				for (final String var : varNums) {
+					final int group = Integer.parseInt(var);
 					replacement = replacement.replace("$" + var, matcher.group(group));
 				}
 				matcher.appendReplacement(sb, escape(replacement));
@@ -771,7 +897,13 @@ public class ReUtil {
 	}
 
 	/**
-	 * 替换所有正则匹配的文本，并使用自定义函数决定如何替换
+	 * 替换所有正则匹配的文本，并使用自定义函数决定如何替换<br>
+	 * replaceFun可以通过{@link Matcher}提取出匹配到的内容的不同部分，然后经过重新处理、组装变成新的内容放回原位。
+	 *
+	 * <pre class="code">
+	 *     replaceAll(this.content, "(\\d+)", parameters -&gt; "-" + parameters.group(1) + "-")
+	 *     // 结果为："ZZZaaabbbccc中文-1234-"
+	 * </pre>
 	 *
 	 * @param str        要替换的字符串
 	 * @param regex      用于匹配的正则式
@@ -784,7 +916,13 @@ public class ReUtil {
 	}
 
 	/**
-	 * 替换所有正则匹配的文本，并使用自定义函数决定如何替换
+	 * 替换所有正则匹配的文本，并使用自定义函数决定如何替换<br>
+	 * replaceFun可以通过{@link Matcher}提取出匹配到的内容的不同部分，然后经过重新处理、组装变成新的内容放回原位。
+	 *
+	 * <pre class="code">
+	 *     replaceAll(this.content, "(\\d+)", parameters -&gt; "-" + parameters.group(1) + "-")
+	 *     // 结果为："ZZZaaabbbccc中文-1234-"
+	 * </pre>
 	 *
 	 * @param str        要替换的字符串
 	 * @param pattern    用于匹配的正则式

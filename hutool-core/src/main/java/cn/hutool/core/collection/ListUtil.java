@@ -2,6 +2,7 @@ package cn.hutool.core.collection;
 
 import cn.hutool.core.comparator.PinyinComparator;
 import cn.hutool.core.comparator.PropertyComparator;
+import cn.hutool.core.lang.Assert;
 import cn.hutool.core.lang.Matcher;
 import cn.hutool.core.util.ArrayUtil;
 import cn.hutool.core.util.ObjectUtil;
@@ -15,7 +16,9 @@ import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.RandomAccess;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /**
  * List相关工具类
@@ -88,7 +91,7 @@ public class ListUtil {
 	}
 
 	/**
-	 * 新建一个ArrayList<br>
+	 * 新建一个List<br>
 	 * 提供的参数为null时返回空{@link ArrayList}
 	 *
 	 * @param <T>      集合元素类型
@@ -273,6 +276,34 @@ public class ListUtil {
 	}
 
 	/**
+	 * 对指定List进行分页，逐页返回数据
+	 *
+	 * @param <T>              集合元素类型
+	 * @param list             源数据列表
+	 * @param pageSize         每页的条目数
+	 * @param pageListConsumer 单页数据函数式返回
+	 * @since 5.7.10
+	 */
+	public static <T> void page(List<T> list, int pageSize, Consumer<List<T>> pageListConsumer) {
+		if (CollUtil.isEmpty(list) || pageSize <= 0) {
+			return;
+		}
+
+		final int total = list.size();
+		final int totalPage = PageUtil.totalPage(total, pageSize);
+		for (int pageNo = PageUtil.getFirstPageNo(); pageNo < totalPage + PageUtil.getFirstPageNo(); pageNo++) {
+			// 获取当前页在列表中对应的起止序号
+			final int[] startEnd = PageUtil.transToStartEnd(pageNo, pageSize);
+			if (startEnd[1] > total) {
+				startEnd[1] = total;
+			}
+
+			// 返回数据
+			pageListConsumer.accept(sub(list, startEnd[0], startEnd[1]));
+		}
+	}
+
+	/**
 	 * 针对List排序，排序会修改原List
 	 *
 	 * @param <T>  元素类型
@@ -282,6 +313,9 @@ public class ListUtil {
 	 * @see Collections#sort(List, Comparator)
 	 */
 	public static <T> List<T> sort(List<T> list, Comparator<? super T> c) {
+		if (CollUtil.isEmpty(list)) {
+			return list;
+		}
 		list.sort(c);
 		return list;
 	}
@@ -333,7 +367,7 @@ public class ListUtil {
 	 */
 	public static <T> List<T> reverseNew(List<T> list) {
 		List<T> list2 = ObjectUtil.clone(list);
-		if(null == list2){
+		if (null == list2) {
 			// 不支持clone
 			list2 = new ArrayList<>(list);
 		}
@@ -351,9 +385,49 @@ public class ListUtil {
 	 * @since 4.1.2
 	 */
 	public static <T> List<T> setOrAppend(List<T> list, int index, T element) {
+		Assert.notNull(list, "List must be not null !");
 		if (index < list.size()) {
 			list.set(index, element);
 		} else {
+			list.add(element);
+		}
+		return list;
+	}
+
+	/**
+	 * 在指定位置设置元素。当index小于List的长度时，替换指定位置的值，否则追加{@code null}直到到达index后，设置值
+	 *
+	 * @param <T>     元素类型
+	 * @param list    List列表
+	 * @param index   位置
+	 * @param element 新元素
+	 * @return 原List
+	 * @since 5。8.4
+	 */
+	public static <T> List<T> setOrPadding(List<T> list, int index, T element) {
+		return setOrPadding(list, index, element, null);
+	}
+
+	/**
+	 * 在指定位置设置元素。当index小于List的长度时，替换指定位置的值，否则追加{@code paddingElement}直到到达index后，设置值
+	 *
+	 * @param <T>     元素类型
+	 * @param list    List列表
+	 * @param index   位置
+	 * @param element 新元素
+	 * @param paddingElement 填充的值
+	 * @return 原List
+	 * @since 5。8.4
+	 */
+	public static <T> List<T> setOrPadding(List<T> list, int index, T element, T paddingElement) {
+		Assert.notNull(list, "List must be not null !");
+		final int size = list.size();
+		if (index < size) {
+			list.set(index, element);
+		} else {
+			for (int i = size; i < index; i++) {
+				list.add(paddingElement);
+			}
 			list.add(element);
 		}
 		return list;
@@ -368,7 +442,8 @@ public class ListUtil {
 	 * @param end   结束位置（不包含）
 	 * @return 截取后的数组，当开始位置超过最大时，返回空的List
 	 */
-	public static <T> List<T> sub(List<T> list, int start, int end) {
+	public static <T> List<T>
+	sub(List<T> list, int start, int end) {
 		return sub(list, start, end, 1);
 	}
 
@@ -439,8 +514,8 @@ public class ListUtil {
 	public static <T> int lastIndexOf(List<T> list, Matcher<T> matcher) {
 		if (null != list) {
 			final int size = list.size();
-			if(size > 0){
-				for(int i = size -1; i >= 0; i--){
+			if (size > 0) {
+				for (int i = size - 1; i >= 0; i--) {
 					if (null == matcher || matcher.match(list.get(i))) {
 						return i;
 					}
@@ -491,6 +566,31 @@ public class ListUtil {
 	}
 
 	/**
+	 * 通过传入分区长度，将指定列表分区为不同的块，每块区域的长度相同（最后一块可能小于长度）<br>
+	 * 分区是在原List的基础上进行的，返回的分区是不可变的抽象列表，原列表元素变更，分区中元素也会变更。
+	 *
+	 * <p>
+	 * 需要特别注意的是，此方法调用{@link List#subList(int, int)}切分List，
+	 * 此方法返回的是原List的视图，也就是说原List有变更，切分后的结果也会变更。
+	 * </p>
+	 *
+	 * @param <T>  集合元素类型
+	 * @param list 列表，为空时返回{@link #empty()}
+	 * @param size 每个段的长度，当长度超过list长度时，size按照list长度计算，即只返回一个节点
+	 * @return 分段列表
+	 * @since 5.4.5
+	 */
+	public static <T> List<List<T>> partition(List<T> list, int size) {
+		if (CollUtil.isEmpty(list)) {
+			return empty();
+		}
+
+		return (list instanceof RandomAccess)
+				? new RandomAccessPartition<>(list, size)
+				: new Partition<>(list, size);
+	}
+
+	/**
 	 * 对集合按照指定长度分段，每一个段为单独的集合，返回这个集合的列表
 	 *
 	 * <p>
@@ -499,25 +599,79 @@ public class ListUtil {
 	 * </p>
 	 *
 	 * @param <T>  集合元素类型
-	 * @param list 列表
-	 * @param size 每个段的长度
+	 * @param list 列表，为空时返回{@link #empty()}
+	 * @param size 每个段的长度，当长度超过list长度时，size按照list长度计算，即只返回一个节点
 	 * @return 分段列表
+	 * @see #partition(List, int)
 	 * @since 5.4.5
 	 */
 	public static <T> List<List<T>> split(List<T> list, int size) {
+		return partition(list, size);
+	}
+
+	/**
+	 * 将集合平均分成多个list，返回这个集合的列表
+	 * <p>例：</p>
+	 * <pre>
+	 *     ListUtil.splitAvg(null, 3);	// []
+	 *     ListUtil.splitAvg(Arrays.asList(1, 2, 3, 4), 2);	// [[1, 2], [3, 4]]
+	 *     ListUtil.splitAvg(Arrays.asList(1, 2, 3), 5);	// [[1], [2], [3], [], []]
+	 *     ListUtil.splitAvg(Arrays.asList(1, 2, 3), 2);	// [[1, 2], [3]]
+	 * </pre>
+	 *
+	 * @param <T>   集合元素类型
+	 * @param list  集合
+	 * @param limit 要均分成几个list
+	 * @return 分段列表
+	 * @author lileming
+	 * @since 5.7.10
+	 */
+	public static <T> List<List<T>> splitAvg(List<T> list, int limit) {
 		if (CollUtil.isEmpty(list)) {
-			return Collections.emptyList();
+			return empty();
 		}
 
-		final int listSize = list.size();
-		final List<List<T>> result = new ArrayList<>(listSize / size + 1);
-		int offset = 0;
-		for (int toIdx = size; toIdx <= listSize; offset = toIdx, toIdx += size) {
-			result.add(list.subList(offset, toIdx));
+		return (list instanceof RandomAccess)
+				? new RandomAccessAvgPartition<>(list, limit)
+				: new AvgPartition<>(list, limit);
+	}
+
+	/**
+	 * 将指定元素交换到指定索引位置,其他元素的索引值不变<br>
+	 * 交换会修改原List<br>
+	 * 如果集合中有多个相同元素，只交换第一个找到的元素
+	 *
+	 * @param <T>         元素类型
+	 * @param list        列表
+	 * @param element     需交换元素
+	 * @param targetIndex 目标索引
+	 * @since 5.7.13
+	 */
+	public static <T> void swapTo(List<T> list, T element, Integer targetIndex) {
+		if (CollUtil.isNotEmpty(list)) {
+			final int index = list.indexOf(element);
+			if (index >= 0) {
+				Collections.swap(list, index, targetIndex);
+			}
 		}
-		if (offset < listSize) {
-			result.add(list.subList(offset, listSize));
+	}
+
+	/**
+	 * 将指定元素交换到指定元素位置,其他元素的索引值不变<br>
+	 * 交换会修改原List<br>
+	 * 如果集合中有多个相同元素，只交换第一个找到的元素
+	 *
+	 * @param <T>           元素类型
+	 * @param list          列表
+	 * @param element       需交换元素
+	 * @param targetElement 目标元素
+	 */
+	public static <T> void swapElement(List<T> list, T element, T targetElement) {
+		if (CollUtil.isNotEmpty(list)) {
+			final int targetIndex = list.indexOf(targetElement);
+			if (targetIndex >= 0) {
+				swapTo(list, element, targetIndex);
+			}
 		}
-		return result;
 	}
 }

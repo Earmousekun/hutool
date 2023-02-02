@@ -2,17 +2,18 @@ package cn.hutool.cache.impl;
 
 import cn.hutool.cache.Cache;
 import cn.hutool.cache.CacheListener;
-import cn.hutool.core.collection.CopiedIter;
 import cn.hutool.core.lang.func.Func0;
+import cn.hutool.core.lang.mutable.Mutable;
+import cn.hutool.core.lang.mutable.MutableObj;
+import cn.hutool.core.map.SafeConcurrentHashMap;
 
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.StampedLock;
+import java.util.stream.Collectors;
 
 /**
  * 超时和限制大小的缓存的默认实现<br>
@@ -29,17 +30,12 @@ import java.util.concurrent.locks.StampedLock;
 public abstract class AbstractCache<K, V> implements Cache<K, V> {
 	private static final long serialVersionUID = 1L;
 
-	protected Map<K, CacheObj<K, V>> cacheMap;
-
-	// 乐观锁，此处使用乐观锁解决读多写少的场景
-	// get时乐观读，再检查是否修改，修改则转入悲观读重新读一遍，可以有效解决在写时阻塞大量读操作的情况。
-	// see: https://www.cnblogs.com/jiagoushijuzi/p/13721319.html
-	protected final StampedLock lock = new StampedLock();
+	protected Map<Mutable<K>, CacheObj<K, V>> cacheMap;
 
 	/**
 	 * 写的时候每个key一把锁，降低锁的粒度
 	 */
-	protected final Map<K, Lock> keyLockMap = new ConcurrentHashMap<>();
+	protected final SafeConcurrentHashMap<K, Lock> keyLockMap = new SafeConcurrentHashMap<>();
 
 	/**
 	 * 返回缓存容量，{@code 0}表示无大小限制
@@ -75,16 +71,6 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 		put(key, object, timeout);
 	}
 
-	@Override
-	public void put(K key, V object, long timeout) {
-		final long stamp = lock.writeLock();
-		try {
-			putWithoutLock(key, object, timeout);
-		} finally {
-			lock.unlockWrite(stamp);
-		}
-	}
-
 	/**
 	 * 加入元素，无锁
 	 *
@@ -93,7 +79,7 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 	 * @param timeout 超时时长
 	 * @since 4.5.16
 	 */
-	private void putWithoutLock(K key, V object, long timeout) {
+	protected void putWithoutLock(K key, V object, long timeout) {
 		CacheObj<K, V> co = new CacheObj<>(key, object, timeout);
 		if (timeout != 0) {
 			existCustomTimeout = true;
@@ -101,34 +87,11 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 		if (isFull()) {
 			pruneCache();
 		}
-		cacheMap.put(key, co);
+		cacheMap.put(MutableObj.of(key), co);
 	}
 	// ---------------------------------------------------------------- put end
 
 	// ---------------------------------------------------------------- get start
-	@Override
-	public boolean containsKey(K key) {
-		final long stamp = lock.readLock();
-		try {
-			// 不存在或已移除
-			final CacheObj<K, V> co = cacheMap.get(key);
-			if (co == null) {
-				return false;
-			}
-
-			if (false == co.isExpired()) {
-				// 命中
-				return true;
-			}
-		} finally {
-			lock.unlockRead(stamp);
-		}
-
-		// 过期
-		remove(key, true);
-		return false;
-	}
-
 	/**
 	 * @return 命中数
 	 */
@@ -152,7 +115,7 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 			keyLock.lock();
 			try {
 				// 双重检查锁，防止在竞争锁的过程中已经有其它线程写入
-				final CacheObj<K, V> co = cacheMap.get(key);
+				final CacheObj<K, V> co = getWithoutLock(key);
 				if (null == co || co.isExpired()) {
 					try {
 						v = supplier.call();
@@ -171,35 +134,15 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 		return v;
 	}
 
-	@Override
-	public V get(K key, boolean isUpdateLastAccess) {
-		// 尝试读取缓存，使用乐观读锁
-		long stamp = lock.tryOptimisticRead();
-		CacheObj<K, V> co = cacheMap.get(key);
-		if(false == lock.validate(stamp)){
-			// 有写线程修改了此对象，悲观读
-			stamp = lock.readLock();
-			try {
-				co = cacheMap.get(key);
-			} finally {
-				lock.unlockRead(stamp);
-			}
-		}
-
-		// 未命中
-		if (null == co) {
-			missCount.increment();
-			return null;
-		} else if (false == co.isExpired()) {
-			hitCount.increment();
-			return co.get(isUpdateLastAccess);
-		}
-
-		// 过期，既不算命中也不算非命中
-		remove(key, true);
-		return null;
+	/**
+	 * 获取键对应的{@link CacheObj}
+	 * @param key 键，实际使用时会被包装为{@link MutableObj}
+	 * @return {@link CacheObj}
+	 * @since 5.8.0
+	 */
+	protected CacheObj<K, V> getWithoutLock(K key){
+		return this.cacheMap.get(MutableObj.of(key));
 	}
-
 	// ---------------------------------------------------------------- get end
 
 	@Override
@@ -207,21 +150,7 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 		CacheObjIterator<K, V> copiedIterator = (CacheObjIterator<K, V>) this.cacheObjIterator();
 		return new CacheValuesIterator<>(copiedIterator);
 	}
-
-	@Override
-	public Iterator<CacheObj<K, V>> cacheObjIterator() {
-		CopiedIter<CacheObj<K, V>> copiedIterator;
-		final long stamp = lock.readLock();
-		try {
-			copiedIterator = CopiedIter.copyOf(this.cacheMap.values().iterator());
-		} finally {
-			lock.unlockRead(stamp);
-		}
-		return new CacheObjIterator<>(copiedIterator);
-	}
-
 	// ---------------------------------------------------------------- prune start
-
 	/**
 	 * 清理实现<br>
 	 * 子类实现此方法时无需加锁
@@ -229,16 +158,6 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 	 * @return 清理数
 	 */
 	protected abstract int pruneCache();
-
-	@Override
-	public final int prune() {
-		final long stamp = lock.writeLock();
-		try {
-			return pruneCache();
-		} finally {
-			lock.unlockWrite(stamp);
-		}
-	}
 	// ---------------------------------------------------------------- prune end
 
 	// ---------------------------------------------------------------- common start
@@ -268,21 +187,6 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 	@Override
 	public boolean isFull() {
 		return (capacity > 0) && (cacheMap.size() >= capacity);
-	}
-
-	@Override
-	public void remove(K key) {
-		remove(key, false);
-	}
-
-	@Override
-	public void clear() {
-		final long stamp = lock.writeLock();
-		try {
-			cacheMap.clear();
-		} finally {
-			lock.unlockWrite(stamp);
-		}
 	}
 
 	@Override
@@ -321,7 +225,7 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 	 * @since 5.5.9
 	 */
 	public Set<K> keySet(){
-		return this.cacheMap.keySet();
+		return this.cacheMap.keySet().stream().map(Mutable::get).collect(Collectors.toSet());
 	}
 
 	/**
@@ -339,37 +243,27 @@ public abstract class AbstractCache<K, V> implements Cache<K, V> {
 	}
 
 	/**
-	 * 移除key对应的对象
-	 *
-	 * @param key           键
-	 * @param withMissCount 是否计数丢失数
-	 */
-	private void remove(K key, boolean withMissCount) {
-		final long stamp = lock.writeLock();
-		CacheObj<K, V> co;
-		try {
-			co = removeWithoutLock(key, withMissCount);
-		} finally {
-			lock.unlockWrite(stamp);
-		}
-		if (null != co) {
-			onRemove(co.key, co.obj);
-		}
-	}
-
-	/**
 	 * 移除key对应的对象，不加锁
 	 *
 	 * @param key           键
 	 * @param withMissCount 是否计数丢失数
 	 * @return 移除的对象，无返回null
 	 */
-	private CacheObj<K, V> removeWithoutLock(K key, boolean withMissCount) {
-		final CacheObj<K, V> co = cacheMap.remove(key);
+	protected CacheObj<K, V> removeWithoutLock(K key, boolean withMissCount) {
+		final CacheObj<K, V> co = cacheMap.remove(MutableObj.of(key));
 		if (withMissCount) {
 			// 在丢失计数有效的情况下，移除一般为get时的超时操作，此处应该丢失数+1
 			this.missCount.increment();
 		}
 		return co;
+	}
+
+	/**
+	 * 获取所有{@link CacheObj}值的{@link Iterator}形式
+	 * @return {@link Iterator}
+	 * @since 5.8.0
+	 */
+	protected Iterator<CacheObj<K, V>> cacheObjIter(){
+		return this.cacheMap.values().iterator();
 	}
 }

@@ -27,7 +27,7 @@ public class JWTValidator {
 	 * 创建JWT验证器
 	 *
 	 * @param token JWT Token
-	 * @return {@link JWTValidator}
+	 * @return JWTValidator
 	 */
 	public static JWTValidator of(String token) {
 		return new JWTValidator(JWT.of(token));
@@ -37,7 +37,7 @@ public class JWTValidator {
 	 * 创建JWT验证器
 	 *
 	 * @param jwt JWT对象
-	 * @return {@link JWTValidator}
+	 * @return JWTValidator
 	 */
 	public static JWTValidator of(JWT jwt) {
 		return new JWTValidator(jwt);
@@ -209,7 +209,8 @@ public class JWTValidator {
 	}
 
 	/**
-	 * 验证指定字段的时间不能晚于当前时间
+	 * 验证指定字段的时间不能晚于当前时间<br>
+	 * 被检查的日期不存在则跳过
 	 *
 	 * @param fieldName   字段名
 	 * @param dateToCheck 被检查的字段日期
@@ -221,7 +222,9 @@ public class JWTValidator {
 		if (null == dateToCheck) {
 			return;
 		}
-		now.setTime(now.getTime() + leeway * 1000);
+		if(leeway > 0){
+			now = DateUtil.date(now.getTime() + leeway * 1000);
+		}
 		if (dateToCheck.after(now)) {
 			throw new ValidateException("'{}':[{}] is after now:[{}]",
 					fieldName, DateUtil.date(dateToCheck), DateUtil.date(now));
@@ -229,7 +232,8 @@ public class JWTValidator {
 	}
 
 	/**
-	 * 验证指定字段的时间不能早于当前时间
+	 * 验证指定字段的时间不能早于当前时间<br>
+	 * 被检查的日期不存在则跳过
 	 *
 	 * @param fieldName   字段名
 	 * @param dateToCheck 被检查的字段日期
@@ -242,7 +246,9 @@ public class JWTValidator {
 		if (null == dateToCheck) {
 			return;
 		}
-		now.setTime(now.getTime() - leeway * 1000);
+		if(leeway > 0){
+			now = DateUtil.date(now.getTime() - leeway * 1000);
+		}
 		if (dateToCheck.before(now)) {
 			throw new ValidateException("'{}':[{}] is before now:[{}]",
 					fieldName, DateUtil.date(dateToCheck), DateUtil.date(now));

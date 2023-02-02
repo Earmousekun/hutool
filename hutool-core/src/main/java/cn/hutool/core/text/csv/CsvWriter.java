@@ -1,11 +1,14 @@
 package cn.hutool.core.text.csv;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.ArrayIter;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.io.IORuntimeException;
 import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.lang.Assert;
+import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.ArrayUtil;
 import cn.hutool.core.util.CharUtil;
 import cn.hutool.core.util.CharsetUtil;
@@ -19,7 +22,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.io.Writer;
 import java.nio.charset.Charset;
-import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,6 +46,10 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	 * 是否处于新行开始
 	 */
 	private boolean newline = true;
+	/**
+	 * 是否首行，即CSV开始的位置，当初始化时默认为true，一旦写入内容，为false
+	 */
+	private boolean isFirstLine = true;
 
 	// --------------------------------------------------------------------------------------------------- Constructor start
 
@@ -147,7 +154,7 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	 */
 	public CsvWriter(Writer writer, CsvWriteConfig config) {
 		this.writer = (writer instanceof BufferedWriter) ? writer : new BufferedWriter(writer);
-		this.config = ObjectUtil.defaultIfNull(config, CsvWriteConfig.defaultConfig());
+		this.config = ObjectUtil.defaultIfNull(config, CsvWriteConfig::defaultConfig);
 	}
 	// --------------------------------------------------------------------------------------------------- Constructor end
 
@@ -181,13 +188,7 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	 * @throws IORuntimeException IO异常
 	 */
 	public CsvWriter write(String[]... lines) throws IORuntimeException {
-		if (ArrayUtil.isNotEmpty(lines)) {
-			for (final String[] values : lines) {
-				appendLine(values);
-			}
-			flush();
-		}
-		return this;
+		return write(new ArrayIter<>(lines));
 	}
 
 	/**
@@ -197,7 +198,7 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	 * @return this
 	 * @throws IORuntimeException IO异常
 	 */
-	public CsvWriter write(Collection<?> lines) throws IORuntimeException {
+	public CsvWriter write(Iterable<?> lines) throws IORuntimeException {
 		if (CollUtil.isNotEmpty(lines)) {
 			for (Object values : lines) {
 				appendLine(Convert.toStrArray(values));
@@ -217,8 +218,9 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	public CsvWriter write(CsvData csvData) {
 		if (csvData != null) {
 			// 1、写header
-			if (CollUtil.isNotEmpty(csvData.getHeader())) {
-				this.writeLine(csvData.getHeader().toArray(new String[0]));
+			final List<String> header = csvData.getHeader();
+			if (CollUtil.isNotEmpty(header)) {
+				this.writeHeaderLine(header.toArray(new String[0]));
 			}
 			// 2、写内容
 			this.write(csvData.getRows());
@@ -233,14 +235,14 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	 * @param beans Bean集合
 	 * @return this
 	 */
-	public CsvWriter writeBeans(Collection<?> beans) {
+	public CsvWriter writeBeans(Iterable<?> beans) {
 		if (CollUtil.isNotEmpty(beans)) {
 			boolean isFirst = true;
 			Map<String, Object> map;
 			for (Object bean : beans) {
 				map = BeanUtil.beanToMap(bean);
-				if(isFirst){
-					writeLine(map.keySet().toArray(new String[0]));
+				if (isFirst) {
+					writeHeaderLine(map.keySet().toArray(new String[0]));
 					isFirst = false;
 				}
 				writeLine(Convert.toStrArray(map.values()));
@@ -248,6 +250,29 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 			flush();
 		}
 		return this;
+	}
+
+	/**
+	 * 写出一行头部行，支持标题别名
+	 *
+	 * @param fields 字段列表 ({@code null} 值会被做为空值追加
+	 * @return this
+	 * @throws IORuntimeException IO异常
+	 * @since 5.7.10
+	 */
+	public CsvWriter writeHeaderLine(String... fields) throws IORuntimeException {
+		final Map<String, String> headerAlias = this.config.headerAlias;
+		if (MapUtil.isNotEmpty(headerAlias)) {
+			// 标题别名替换
+			String alias;
+			for (int i = 0; i < fields.length; i++) {
+				alias = headerAlias.get(fields[i]);
+				if (null != alias) {
+					fields[i] = alias;
+				}
+			}
+		}
+		return writeLine(fields);
 	}
 
 	/**
@@ -283,7 +308,8 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	}
 
 	/**
-	 * 写出一行注释，注释符号可自定义
+	 * 写出一行注释，注释符号可自定义<br>
+	 * 如果注释符不存在，则抛出异常
 	 *
 	 * @param comment 注释内容
 	 * @return this
@@ -291,10 +317,16 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	 * @since 5.5.7
 	 */
 	public CsvWriter writeComment(String comment) {
+		Assert.notNull(this.config.commentCharacter, "Comment is disable!");
 		try {
+			if(isFirstLine){
+				// 首行不补换行符
+				isFirstLine = false;
+			}else {
+				writer.write(config.lineDelimiter);
+			}
 			writer.write(this.config.commentCharacter);
 			writer.write(comment);
-			writer.write(config.lineDelimiter);
 			newline = true;
 		} catch (IOException e) {
 			throw new IORuntimeException(e);
@@ -338,12 +370,17 @@ public final class CsvWriter implements Closeable, Flushable, Serializable {
 	 * @param fields 字段列表 ({@code null} 值会被做为空值追加)
 	 * @throws IOException IO异常
 	 */
-	private void doAppendLine(final String... fields) throws IOException {
+	private void doAppendLine(String... fields) throws IOException {
 		if (null != fields) {
+			if(isFirstLine){
+				// 首行不补换行符
+				isFirstLine = false;
+			}else {
+				writer.write(config.lineDelimiter);
+			}
 			for (String field : fields) {
 				appendField(field);
 			}
-			writer.write(config.lineDelimiter);
 			newline = true;
 		}
 	}

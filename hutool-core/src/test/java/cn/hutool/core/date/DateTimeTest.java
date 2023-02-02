@@ -106,6 +106,17 @@ public class DateTimeTest {
 	}
 
 	@Test
+	public void toStringTest2() {
+		DateTime dateTime = new DateTime("2017-01-05 12:34:23", DatePattern.NORM_DATETIME_FORMAT);
+
+		String dateStr = dateTime.toString(DatePattern.UTC_WITH_ZONE_OFFSET_PATTERN);
+		Assert.assertEquals("2017-01-05T12:34:23+0800", dateStr);
+
+		dateStr = dateTime.toString(DatePattern.UTC_WITH_XXX_OFFSET_PATTERN);
+		Assert.assertEquals("2017-01-05T12:34:23+08:00", dateStr);
+	}
+
+	@Test
 	public void monthTest() {
 		//noinspection ConstantConditions
 		int month = DateUtil.parse("2017-07-01").month();
@@ -119,5 +130,14 @@ public class DateTimeTest {
 		Assert.assertEquals(2016, date.year());
 		//跨年的周返回的总是1
 		Assert.assertEquals(1, date.weekOfYear());
+	}
+
+	/**
+	 * 严格模式下，不允许非常规的数字，如秒部分最多59，99则报错
+	 */
+	@Test(expected = IllegalArgumentException.class)
+	public void ofTest(){
+		String a = "2021-09-27 00:00:99";
+		new DateTime(a, DatePattern.NORM_DATETIME_FORMAT, false);
 	}
 }

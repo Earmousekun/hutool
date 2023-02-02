@@ -1,6 +1,7 @@
 package cn.hutool.cache.impl;
 
 import cn.hutool.cache.GlobalPruneTimer;
+import cn.hutool.core.lang.mutable.Mutable;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -16,7 +17,7 @@ import java.util.concurrent.ScheduledFuture;
  * @param <K> 键类型
  * @param <V> 值类型
  */
-public class TimedCache<K, V> extends AbstractCache<K, V> {
+public class TimedCache<K, V> extends StampedCache<K, V> {
 	private static final long serialVersionUID = 1L;
 
 	/** 正在执行的定时任务 */
@@ -37,7 +38,7 @@ public class TimedCache<K, V> extends AbstractCache<K, V> {
 	 * @param timeout 过期时长
 	 * @param map 存储缓存对象的map
 	 */
-	public TimedCache(long timeout, Map<K, CacheObj<K, V>> map) {
+	public TimedCache(long timeout, Map<Mutable<K>, CacheObj<K, V>> map) {
 		this.capacity = 0;
 		this.timeout = timeout;
 		this.cacheMap = map;
@@ -52,7 +53,7 @@ public class TimedCache<K, V> extends AbstractCache<K, V> {
 	@Override
 	protected int pruneCache() {
 		int count = 0;
-		Iterator<CacheObj<K, V>> values = cacheMap.values().iterator();
+		final Iterator<CacheObj<K, V>> values = cacheObjIter();
 		CacheObj<K, V> co;
 		while (values.hasNext()) {
 			co = values.next();

@@ -1,5 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
@@ -8,7 +9,7 @@
 	<parent>
 		<groupId>cn.hutool</groupId>
 		<artifactId>hutool-parent</artifactId>
-		<version>5.7.4</version>
+		<version>5.8.11</version>
 	</parent>
 
 	<artifactId>hutool-script</artifactId>
@@ -16,9 +17,9 @@
 	<description>Hutool 脚本执行封装</description>
 
 	<properties>
-		<jython.version>2.7.2</jython.version>
+		<jython.version>2.7.3</jython.version>
 		<luaj.version>3.0.1</luaj.version>
-		<groovy.version>3.0.8</groovy.version>
+		<groovy.version>3.0.13</groovy.version>
 	</properties>
 
 	<dependencies>

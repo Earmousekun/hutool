@@ -15,7 +15,7 @@ import java.util.Iterator;
  * @param <K> 键类型
  * @param <V> 值类型
  */
-public class LFUCache<K, V> extends AbstractCache<K, V> {
+public class LFUCache<K, V> extends StampedCache<K, V> {
 	private static final long serialVersionUID = 1L;
 
 	/**
@@ -57,7 +57,7 @@ public class LFUCache<K, V> extends AbstractCache<K, V> {
 		CacheObj<K, V> comin = null;
 
 		// 清理过期对象并找出访问最少的对象
-		Iterator<CacheObj<K, V>> values = cacheMap.values().iterator();
+		Iterator<CacheObj<K, V>> values = cacheObjIter();
 		CacheObj<K, V> co;
 		while (values.hasNext()) {
 			co = values.next();
@@ -78,7 +78,7 @@ public class LFUCache<K, V> extends AbstractCache<K, V> {
 		if (isFull() && comin != null) {
 			long minAccessCount = comin.accessCount.get();
 
-			values = cacheMap.values().iterator();
+			values = cacheObjIter();
 			CacheObj<K, V> co1;
 			while (values.hasNext()) {
 				co1 = values.next();
